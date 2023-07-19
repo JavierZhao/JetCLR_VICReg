@@ -53,32 +53,22 @@ class GATTransformer(torch.nn.Module):
                 self.parameters(), lr=learning_rate, momentum=0.9
             )
 
-    def forward(self, data):
-        x, edge_index = data.x, data.edge_index
+    def forward(self, view1, view2):
+        x_1, edge_index_1 = view1.x, view1.edge_index
+        x_2, edge_index_2 = view2.x, view2.edge_index
 
-        x = self.embedding(x)
+        x_1 = self.embedding(x_1)
+        x_2 = self.embedding(x_2)
 
         for layer in self.head_layers:
-            x = F.relu(layer(x, edge_index))
-            x = F.dropout(x, p=self.dropout, training=self.training)
+            x_1 = F.relu(layer(x_1, edge_index_1))
+            x_1 = F.dropout(x_1, p=self.dropout, training=self.training)
+            x_2 = F.relu(layer(x_2, edge_index_2))
+            x_2 = F.dropout(x_2, p=self.dropout, training=self.training)
 
-        x = global_mean_pool(x, data.batch)  # Pooling
-        x = self.fc(x)
+        x_1 = global_mean_pool(x_1, x_1.batch)  # Pooling
+        x_1 = self.fc(x_1)
+        x_2 = global_mean_pool(x_2, x_2.batch)  # Pooling
+        x_2 = self.fc(x_2)
 
-        return x
-
-    def forward_batchwise(self, data, batch_size):
-        with torch.no_grad():
-            out = []
-            data_list = data.to_data_list()
-            idx_list = torch.split(torch.arange(len(data_list)), batch_size)
-
-            for idx in idx_list:
-                batch_data = [data_list[i] for i in idx]
-                batch_data = torch_geometric.data.Batch.from_data_list(batch_data)
-                output = self(batch_data).detach().cpu()
-                out.append(output)
-
-            out = torch.cat(out, dim=0)
-
-        return out
+        return x_1, x_2
