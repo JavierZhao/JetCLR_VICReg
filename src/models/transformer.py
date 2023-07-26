@@ -66,40 +66,70 @@ class Transformer(nn.Module):
                 self.parameters(), lr=self.learning_rate, momentum=0.9
             )
 
-    def forward(self, view1, view2, mask=None, mult_reps=False):
+    # this version of forward() takes in two views and returns two representations
+    # def forward(self, view1, view2, mask=None, mult_reps=False):
+    #     """
+    #     the two views are shaped like DataBatch(x=[12329, 7], y=[256], batch=[12329], ptr=[257])
+    #     transformer expects (sequence_length, feature_number) so we don't need to transpose
+    #     """
+    #     view1_representations, view2_representations = [], []
+    #     assert len(view1) == len(view2)
+    #     # produce one representation per jet
+    #     for i in range(len(view1)):
+    #         jet1 = view1[i]
+    #         jet2 = view2[i]
+    #         # make a copy
+    #         x_1 = jet1.x + 0.0
+    #         x_2 = jet2.x + 0.0
+    #         # cast to torch.float32 to prevent RuntimeError: mat1 and mat2 must have the same dtype
+    #         x_1 = x_1.to(torch.float32)
+    #         x_2 = x_2.to(torch.float32)
+    #         # embedding
+    #         x_1 = self.embedding(x_1)
+    #         x_2 = self.embedding(x_2)
+    #         # transformer
+    #         x_1 = self.transformer(x_1, mask=mask)
+    #         x_2 = self.transformer(x_2, mask=mask)
+    #         # sum over sequence dim
+    #         # (batch_size, model_dim)
+    #         x_1 = x_1.sum(0)
+    #         x_2 = x_2.sum(0)
+    #         # head
+    #         x_1 = self.head(x_1, mult_reps)
+    #         x_2 = self.head(x_2, mult_reps)
+    #         # append to representations list
+    #         view1_representations.append(x_1)
+    #         view2_representations.append(x_2)
+
+    #     return torch.stack(view1_representations), torch.stack(view2_representations)
+
+    # this version of forward() takes in one view and returns one representation
+    def forward(self, view1, mask=None, mult_reps=False):
         """
         the two views are shaped like DataBatch(x=[12329, 7], y=[256], batch=[12329], ptr=[257])
         transformer expects (sequence_length, feature_number) so we don't need to transpose
         """
-        view1_features, view2_features = [], []
-        assert len(view1) == len(view2)
+        view1_representations = []
+        # produce one representation per jet
         for i in range(len(view1)):
             jet1 = view1[i]
-            jet2 = view2[i]
             # make a copy
             x_1 = jet1.x + 0.0
-            x_2 = jet2.x + 0.0
             # cast to torch.float32 to prevent RuntimeError: mat1 and mat2 must have the same dtype
             x_1 = x_1.to(torch.float32)
-            x_2 = x_2.to(torch.float32)
             # embedding
             x_1 = self.embedding(x_1)
-            x_2 = self.embedding(x_2)
             # transformer
             x_1 = self.transformer(x_1, mask=mask)
-            x_2 = self.transformer(x_2, mask=mask)
             # sum over sequence dim
             # (batch_size, model_dim)
             x_1 = x_1.sum(0)
-            x_2 = x_2.sum(0)
             # head
             x_1 = self.head(x_1, mult_reps)
-            x_2 = self.head(x_2, mult_reps)
-            # append to feature list
-            view1_features.append(x_1)
-            view2_features.append(x_2)
+            # append to representations list
+            view1_representations.append(x_1)
 
-        return torch.stack(view1_features, view2_features)
+        return torch.stack(view1_representations)
 
     def head(self, x, mult_reps):
         """
