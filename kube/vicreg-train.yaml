@@ -18,16 +18,16 @@ spec:
             git checkout main &&
             git pull &&
             pip install -e . &&
-            python -m src.models.pretrain_vicreg.py
+            python -m src.models.pretrain_vicreg
             --batch-size 256
             --epoch 50
             --label default
             --dataset-path "/ssl-jet-vol-v2/toptagging"
-            --num_train_files 1
-            --num_val_files 1
+            --num-train-files 1
+            --num-val-files 1
             --shared False
             --Do 1000
-            --return_all_losses True
+            --return-all-losses True
             | tee /ssl-jet-vol-v2/JetCLR_VICReg/logs/zz-vicreg-train-default-quick-log.txt
         volumeMounts:
         - mountPath: /ssl-jet-vol-v2
