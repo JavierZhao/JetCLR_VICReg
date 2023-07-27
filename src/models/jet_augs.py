@@ -12,8 +12,7 @@ import torch.nn.functional as F
 
 def translate_jets(batch, device, width=1.0):
     bb = batch.clone()
-    bb = bb.to("cpu")
-    X = bb.x.numpy()
+    X = bb.x.cpu().numpy()
     ptp_eta = np.ptp(X[:, 0], axis=-1, keepdims=True)
     ptp_phi = np.ptp(X[:, 1], axis=-1, keepdims=True)
     low_eta = -width * ptp_eta
@@ -37,7 +36,7 @@ def translate_jets(batch, device, width=1.0):
 
     # To make sure that the components of each jet get shifted by the same amount
     for i in range(len(bb)):
-        X_jet = bb[i].x.numpy()
+        X_jet = bb[i].x.cpu().numpy()
         shift_eta_jet = np.ones((X_jet.shape[0], 1)) * shift_eta_batch[i]
         shift_phi_jet = np.ones((X_jet.shape[0], 1)) * shift_phi_batch[i]
         if i == 0:
@@ -56,7 +55,6 @@ def translate_jets(batch, device, width=1.0):
 
 def rotate_jets(batch, device):
     bb = batch.clone()
-    bb = bb.to("cpu")
     rot_angle = np.random.rand(len(bb)) * 2 * np.pi
     #     print(rot_angle)
     c = np.cos(rot_angle)
@@ -69,7 +67,7 @@ def rotate_jets(batch, device):
     for i in range(len(bb)):
         x_ = bb[i].x[:, :3]
         new_x = np.einsum(
-            "ij,jk", bb[i].x[:, :3], rot_matrix[i]
+            "ij,jk", bb[i].x.cpu()[:, :3], rot_matrix[i]
         )  # this is somehow (pT, eta', phi')
         new_x[:, [0, 2]] = new_x[:, [2, 0]]
         new_x[:, [0, 1]] = new_x[:, [1, 0]]  # now (phi', eta', pT)
