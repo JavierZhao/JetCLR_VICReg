@@ -8,34 +8,37 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+from torch_geometric.loader import DataLoader
 import tqdm
 import yaml
 from torch import nn
 
-from src.data.h5data import H5Data
-from src.models.InteractionNet import InteractionNetTaggerEmbedding
+from src.models.transformer import Transformer
+from src.models.jet_augs import translate_jets, rotate_jets
 
 # if torch.cuda.is_available():
 #     import setGPU  # noqa: F401
 
 project_dir = Path(__file__).resolve().parents[2]
 
-definitions = f"{project_dir}/src/data/definitions.yml"
-with open(definitions) as yaml_file:
-    defn = yaml.load(yaml_file, Loader=yaml.FullLoader)
+# definitions = f"{project_dir}/src/data/definitions.yml"
+# with open(definitions) as yaml_file:
+#     defn = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
-N = defn["nobj_2"]  # number of charged particles
-N_sv = defn["nobj_3"]  # number of SVs
-n_targets = len(defn["reduced_labels"])  # number of classes
-params = defn["features_2"]
-params_sv = defn["features_3"]
+# N = defn["nobj_2"]  # number of charged particles
+# N_sv = defn["nobj_3"]  # number of SVs
+# n_targets = len(defn["reduced_labels"])  # number of classes
+# params = defn["features_2"]
+# params_sv = defn["features_3"]
 
 
 class VICReg(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.args = args
-        self.num_features = int(args.mlp.split("-")[-1])
+        self.num_features = int(
+            args.mlp.split("-")[-1]
+        )  # size of the last layer of the MLP projector
         self.x_transform = nn.Sequential(
             nn.BatchNorm1d(args.x_inputs),
             nn.Linear(args.x_inputs, args.transform_inputs),
@@ -48,38 +51,53 @@ class VICReg(nn.Module):
             nn.BatchNorm1d(args.transform_inputs),
             nn.ReLU(),
         )
+        self.augmentation = args.augmentation
         self.x_backbone = args.x_backbone
         self.y_backbone = args.y_backbone
-        self.N_x = self.x_backbone.N
-        self.N_y = self.y_backbone.N
+        self.N_x = self.x_backbone.input_dim
+        self.N_y = self.y_backbone.input_dim
         self.embedding = args.Do
         self.return_embedding = args.return_embedding
         self.return_representation = args.return_representation
         self.x_projector = Projector(args.mlp, self.embedding)
-        self.y_projector = self.x_projector if args.shared else copy.deepcopy(self.x_projector)
+        self.y_projector = (
+            self.x_projector if args.shared else copy.deepcopy(self.x_projector)
+        )
 
     def forward(self, x, y):
-        # x: [batch, x_inputs, N_x]
-        # y: (batch, y_inputs, N_y]
-        x = x.transpose(-1, -2).contiguous()  # [batch, N_x, x_inputs]
-        y = y.transpose(-1, -2).contiguous()  # [batch, N_y, y_inputs]
-        x = self.x_transform(x.view(-1, self.args.x_inputs)).view(
-            -1, self.N_x, self.args.transform_inputs
-        )  # [batch, N_x, transform_inputs]
-        y = self.y_transform(y.view(-1, self.args.y_inputs)).view(
-            -1, self.N_y, self.args.transform_inputs
-        )  # [batch, N_y, transform_inputs]
-        x = x.transpose(-1, -2).contiguous()  # [batch, transform_inputs, N_x]
-        y = y.transpose(-1, -2).contiguous()  # [batch, transform_inputs, N_y]
-        x = self.x_backbone(x)
-        y = self.y_backbone(y)
-        if self.return_representation:
-            return x, y
-        x = self.x_projector(x)
-        y = self.y_projector(y)
-        if self.return_embedding:
-            return x, y
+        """
+        x -> x_aug -> x_xform -> x_rep -> x_emb
+        y -> y_aug -> y_xform -> y_rep -> y_emb
+        _aug: augmented
+        _xform: transformed by linear layer
+        _rep: backbone representation
+        _emb: projected embedding
+        """
+        # x: [N_x, x_inputs]
+        # y: [N_y, y_inputs]
+        x_aug = self.augmentation(self.args, x, self.args.device)
+        y_aug = self.augmentation(self.args, y, self.args.device)
 
+        x_xform = x_aug
+        y_xform = y_aug
+        x_xform.x = self.x_transform.to(torch.double)(
+            x_aug.x.double()
+        )  # [N_x, transform_inputs]?
+        y_xform.x = self.y_transform.to(torch.double)(
+            y_aug.x.double()
+        )  # [N_y, transform_inputs]?
+
+        x_rep = self.x_backbone(x_aug)  # [batch_size, output_dim]
+        y_rep = self.y_backbone(y_aug)  # [batch_size, output_dim]
+        if self.return_representation:
+            return x_rep, y_rep
+
+        x_emb = self.x_projector(x_rep)  # [batch_size, embedding_size]
+        y_emb = self.y_projector(y_rep)  # [batch_size, embedding_size]
+        if self.return_embedding:
+            return x_emb, y_emb
+        x = x_emb
+        y = y_emb
         repr_loss = F.mse_loss(x, y)
 
         x = x - x.mean(dim=0)
@@ -91,12 +109,19 @@ class VICReg(nn.Module):
 
         cov_x = (x.T @ x) / (self.args.batch_size - 1)
         cov_y = (y.T @ y) / (self.args.batch_size - 1)
-        cov_loss = off_diagonal(cov_x).pow_(2).sum().div(self.num_features) + off_diagonal(cov_y).pow_(2).sum().div(
+        cov_loss = off_diagonal(cov_x).pow_(2).sum().div(
             self.num_features
-        )
+        ) + off_diagonal(cov_y).pow_(2).sum().div(self.num_features)
 
-        loss = self.args.sim_coeff * repr_loss + self.args.std_coeff * std_loss + self.args.cov_coeff * cov_loss
-        return loss
+        loss = (
+            self.args.sim_coeff * repr_loss
+            + self.args.std_coeff * std_loss
+            + self.args.cov_coeff * cov_loss
+        )
+        if args.return_all_losses:
+            return loss, repr_loss, std_loss, cov_loss
+        else:
+            return loss
 
 
 def Projector(mlp, embedding):
@@ -118,93 +143,59 @@ def off_diagonal(x):
 
 
 def get_backbones(args):
-
-    fr = nn.Sequential(
-        nn.Linear(2 * args.transform_inputs, args.hidden),
-        nn.BatchNorm1d(args.hidden),
-        nn.ReLU(),
-        nn.Linear(args.hidden, args.hidden),
-        nn.BatchNorm1d(args.hidden),
-        nn.ReLU(),
-        nn.Linear(args.hidden, args.De),
-        nn.BatchNorm1d(args.De),
-        nn.ReLU(),
-    )
-    fo = nn.Sequential(
-        nn.Linear(args.transform_inputs + args.De, args.hidden),
-        nn.BatchNorm1d(args.hidden),
-        nn.ReLU(),
-        nn.Linear(args.hidden, args.hidden),
-        nn.BatchNorm1d(args.hidden),
-        nn.ReLU(),
-        nn.Linear(args.hidden, args.Do),
-        nn.BatchNorm1d(args.Do),
-        nn.ReLU(),
-    )
-    x_backbone = InteractionNetTaggerEmbedding(
-        dims=N,
-        features_dims=args.transform_inputs,
-        fr=fr,
-        fo=fo,
-        De=args.De,
-        Do=args.Do,
-    ).to(args.device)
-    y_backbone = InteractionNetTaggerEmbedding(
-        dims=N_sv,
-        features_dims=args.transform_inputs,
-        fr=fr if args.shared else copy.deepcopy(fr),
-        fo=fo if args.shared else copy.deepcopy(fo),
-        De=args.De,
-        Do=args.Do,
-    ).to(args.device)
+    x_backbone = Transformer(input_dim=args.transform_inputs)
+    y_backbone = x_backbone if args.shared else copy.deepcopy(x_backbone)
     return x_backbone, y_backbone
 
 
+def augmentation(args, batch, device):
+    """
+    batch: DataBatch(x=[12329, 7], y=[batch_size], batch=[12329], ptr=[257])
+    """
+    if args.do_translation:
+        batch = translate_jets(batch, device, width=1.0)
+    if args.do_rotation:
+        batch = rotate_jets(batch, device)
+    return batch.to(device)
+
+
+# load the datafiles
+def load_data(dataset_path, flag, n_files=-1):
+    data_files = glob.glob(f"{dataset_path}/{flag}/processed/*")
+
+    data = []
+    for i, file in enumerate(data_files):
+        data += torch.load(f"{dataset_path}/{flag}/processed/data_{i}.pt")
+        print(f"--- loaded file {i} from `{flag}` directory")
+        if n_files != -1 and i == n_files - 1:
+            break
+
+    return data
+
+
 def main(args):
-
-    files = glob.glob(os.path.join(args.train_path, "newdata_*.h5"))
-    # take first 10% of files for validation
-    # n_files_val should be 5 for full dataset
-    n_files_val = max(1, int(0.1 * len(files)))
-    files_val = files[:n_files_val]
-    files_train = files[n_files_val:]
-
     n_epochs = args.epoch
     batch_size = args.batch_size
     outdir = args.outdir
     label = args.label
-    args.return_embedding = False
-    args.return_representation = False
+    args.augmentation = augmentation
 
     model_loc = f"{outdir}/trained_models/"
     model_perf_loc = f"{outdir}/model_performances/"
     model_dict_loc = f"{outdir}/model_dicts/"
-    os.system(f"mkdir -p {model_loc} {model_perf_loc} {model_dict_loc}")
+    os.system(
+        f"mkdir -p {model_loc} {model_perf_loc} {model_dict_loc}"
+    )  # -p: create parent dirs if needed, exist_ok
 
-    data_train = H5Data(
-        batch_size=batch_size,
-        cache=None,
-        preloading=0,
-        features_name="training_subgroup",
-        labels_name="target_subgroup",
-        spectators_name="spectator_subgroup",
-    )
-    data_train.set_file_names(files_train)
-    data_val = H5Data(
-        batch_size=batch_size,
-        cache=None,
-        preloading=0,
-        features_name="training_subgroup",
-        labels_name="target_subgroup",
-        spectators_name="spectator_subgroup",
-    )
-    data_val.set_file_names(files_val)
+    # prepare data
+    data_train = load_data(args.dataset_path, "train", n_files=args.num_train_files)
+    data_valid = load_data(args.dataset_path, "val", n_files=args.num_val_files)
 
-    n_train = data_train.count_data()
-    n_val = data_val.count_data()
+    n_train = len(data_train)
+    n_val = len(data_valid)
 
-    args.x_inputs = len(params)
-    args.y_inputs = len(params_sv)
+    args.x_inputs = 7
+    args.y_inputs = 7
 
     args.x_backbone, args.y_backbone = get_backbones(args)
     model = VICReg(args).to(args.device)
@@ -213,51 +204,130 @@ def main(args):
     val_its = int(n_val / batch_size)
 
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
-    loss_val = []
-    loss_train = []
+    loss_val_epochs = []  # loss recorded for each epoch
+    repr_loss_val_epochs, std_loss_val_epochs, cov_loss_val_epochs = [], [], []
+    # invariance, variance, covariance loss recorded for each epoch
+    loss_val_batches = []  # loss recorded for each batch
+    loss_train_epochs = []  # loss recorded for each epoch
+    repr_loss_train_epochs, std_loss_train_epochs, cov_loss_train_epochs = [], [], []
+    # invariance, variance, covariance loss recorded for each epoch
+    loss_train_batches = []  # loss recorded for each batch
     l_val_best = 999999
     for m in range(n_epochs):
         print(f"Epoch {m}\n")
-        loss_val_epoch = []
-        train_iterator = data_train.generate_data()
+        loss_train_epoch = []  # loss recorded for each batch in this epoch
+        repr_loss_train_epoch, std_loss_train_epoch, cov_loss_train_epoch = [], [], []
+        # invariance, variance, covariance loss recorded for each batch in this epoch
+        loss_val_epoch = []  # loss recorded for each batch in this epoch
+        repr_loss_val_epoch, std_loss_val_epoch, cov_loss_val_epoch = [], [], []
+        # invariance, variance, covariance loss recorded for each batch in this epoch
+
+        train_loader = DataLoader(data_train, batch_size)
         model.train()
-        pbar = tqdm.tqdm(train_iterator, total=train_its)
-        for element in pbar:
-            (sub_X, _, _) = element
-            x = torch.tensor(sub_X[2], dtype=torch.float, device=args.device)
-            y = torch.tensor(sub_X[3], dtype=torch.float, device=args.device)
+        pbar = tqdm.tqdm(train_loader, total=train_its)
+        for _, batch in tqdm.tqdm(enumerate(train_loader)):
+            batch = batch.to(args.device)
             optimizer.zero_grad()
-            loss = model.forward(x, y)
+            if args.return_all_losses:
+                loss, repr_loss, std_loss, cov_loss = model.forward(
+                    batch, copy.deepcopy(batch)
+                )
+                repr_loss_train_epoch.append(repr_loss.detach().cpu().item())
+                std_loss_train_epoch.append(std_loss.detach().cpu().item())
+                cov_loss_train_epoch.append(cov_loss.detach().cpu().item())
+            else:
+                loss = model.forward(batch, copy.deepcopy(batch))
             loss.backward()
             optimizer.step()
             loss = loss.detach().cpu().item()
-            loss_train.append(loss)
+            loss_train_batches.append(loss)
+            loss_train_epoch.append(loss)
             pbar.set_description(f"Training loss: {loss:.4f}")
         model.eval()
-        val_iterator = data_val.generate_data()
-        pbar = tqdm.tqdm(val_iterator, total=val_its)
-        for element in pbar:
-            (sub_X, _, _) = element
-            x = torch.tensor(sub_X[2], dtype=torch.float, device=args.device)
-            y = torch.tensor(sub_X[3], dtype=torch.float, device=args.device)
-            loss = model.forward(x, y).cpu().item()
-            loss_val.append(loss)
+        valid_loader = DataLoader(data_valid, batch_size)
+        pbar = tqdm.tqdm(valid_loader, total=val_its)
+        for _, batch in tqdm.tqdm(enumerate(valid_loader)):
+            batch = batch.to(args.device)
+            if args.return_all_losses:
+                loss, repr_loss, std_loss, cov_loss = model.forward(
+                    batch, copy.deepcopy(batch)
+                )
+                repr_loss_val_epoch.append(repr_loss.detach().cpu().item())
+                std_loss_val_epoch.append(std_loss.detach().cpu().item())
+                cov_loss_val_epoch.append(cov_loss.detach().cpu().item())
+                loss = loss.detach().cpu().item()
+            else:
+                loss = model.forward(batch, batch.deepcopy()).cpu().item()
+            loss_val_batches.append(loss)
             loss_val_epoch.append(loss)
             pbar.set_description(f"Validation loss: {loss:.4f}")
-
         l_val = np.mean(np.array(loss_val_epoch))
+        l_train = np.mean(np.array(loss_train_epoch))
+        loss_val_epochs.append(l_val)
+        loss_train_epochs.append(l_train)
+
+        if args.return_all_losses:
+            repr_l_val = np.mean(np.array(repr_loss_val_epoch))
+            repr_l_train = np.mean(np.array(repr_loss_train_epoch))
+            std_l_val = np.mean(np.array(std_loss_val_epoch))
+            std_l_train = np.mean(np.array(std_loss_train_epoch))
+            cov_l_val = np.mean(np.array(cov_loss_val_epoch))
+            cov_l_train = np.mean(np.array(cov_loss_train_epoch))
+
+            repr_loss_val_epochs.append(repr_l_val)
+            std_loss_val_epochs.append(std_l_val)
+            cov_loss_val_epochs.append(cov_l_val)
+
+            repr_loss_train_epochs.append(repr_l_train)
+            std_loss_train_epochs.append(std_l_train)
+            cov_loss_train_epochs.append(cov_l_train)
+        # save the model
         if l_val < l_val_best:
             print("New best model")
             l_val_best = l_val
             torch.save(model.state_dict(), f"{model_loc}/vicreg_{label}_best.pth")
         torch.save(model.state_dict(), f"{model_loc}/vicreg_{label}_last.pth")
+    # After training
+    np.save(
+        f"{model_perf_loc}/vicreg_{label}_loss_train_epochs.npy",
+        np.array(loss_train_epochs),
+    )
+    np.save(
+        f"{model_perf_loc}/vicreg_{label}_loss_train_batches.npy",
+        np.array(loss_train_batches),
+    )
+    np.save(
+        f"{model_perf_loc}/vicreg_{label}_loss_val_epochs.npy",
+        np.array(loss_val_epochs),
+    )
+    np.save(
+        f"{model_perf_loc}/vicreg_{label}_loss_val_batches.npy",
+        np.array(loss_val_batches),
+    )
+    if args.return_all_losses:
         np.save(
-            f"{model_perf_loc}/vicreg_{label}_loss_train.npy",
-            np.array(loss_train),
+            f"{model_perf_loc}/vicreg_{label}_repr_loss_train_epochs.npy",
+            np.array(repr_loss_train_epochs),
         )
         np.save(
-            f"{model_perf_loc}/vicreg_{label}_loss_val.npy",
-            np.array(loss_val),
+            f"{model_perf_loc}/vicreg_{label}_std_loss_train_epochs.npy",
+            np.array(std_loss_train_epochs),
+        )
+        np.save(
+            f"{model_perf_loc}/vicreg_{label}_cov_loss_train_epochs.npy",
+            np.array(cov_loss_train_epochs),
+        )
+        np.save(
+            f"{model_perf_loc}/vicreg_{label}_repr_loss_val_epochs.npy",
+            np.array(repr_loss_val_epochs),
+        )
+        np.save(
+            f"{model_perf_loc}/vicreg_{label}_std_loss_val_epochs.npy",
+            np.array(std_loss_val_epochs),
+        )
+        np.save(
+            f"{model_perf_loc}/vicreg_{label}_cov_loss_val_epochs.npy",
+            np.array(cov_loss_val_epochs),
         )
 
 
@@ -266,11 +336,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--train-path",
+        "--dataset-path",
         type=str,
         action="store",
         default=f"{project_dir}/data/processed/train/",
-        help="Input directory with training files",
+        help="Input directory with the dataset",
+    )
+    parser.add_argument(
+        "--num-train-files",
+        type=int,
+        default=-1,
+        help="Number of files to use for training",
+    )
+    parser.add_argument(
+        "--num-val-files",
+        type=int,
+        default=-1,
+        help="Number of files to use for validation",
     )
     parser.add_argument(
         "--outdir",
@@ -288,15 +370,23 @@ if __name__ == "__main__":
         default=32,
         help="transform_inputs",
     )
-    parser.add_argument("--De", type=int, action="store", dest="De", default=32, help="De")
-    parser.add_argument("--Do", type=int, action="store", dest="Do", default=64, help="Do")
-    parser.add_argument("--hidden", type=int, action="store", dest="hidden", default=128, help="hidden")
+    parser.add_argument(
+        "--De", type=int, action="store", dest="De", default=32, help="De"
+    )
+    parser.add_argument(
+        "--Do", type=int, action="store", dest="Do", default=64, help="Do"
+    )
+    parser.add_argument(
+        "--hidden", type=int, action="store", dest="hidden", default=128, help="hidden"
+    )
     parser.add_argument(
         "--shared",
         action="store_true",
         help="share parameters of backbone",
     )
-    parser.add_argument("--epoch", type=int, action="store", dest="epoch", default=200, help="Epochs")
+    parser.add_argument(
+        "--epoch", type=int, action="store", dest="epoch", default=200, help="Epochs"
+    )
     parser.add_argument(
         "--label",
         type=str,
@@ -342,6 +432,46 @@ if __name__ == "__main__":
         type=float,
         default=1.0,
         help="Covariance regularization loss coefficient",
+    )
+    parser.add_argument(
+        "--return-embedding",
+        type=bool,
+        action="store",
+        dest="return_embedding",
+        default=False,
+        help="return_embedding",
+    )
+    parser.add_argument(
+        "--return-representation",
+        type=bool,
+        action="store",
+        dest="return_representation",
+        default=False,
+        help="return_representation",
+    )
+    parser.add_argument(
+        "--do-translation",
+        type=bool,
+        action="store",
+        dest="do_translation",
+        default=True,
+        help="do_translation",
+    )
+    parser.add_argument(
+        "--do-rotation",
+        type=bool,
+        action="store",
+        dest="do_rotation",
+        default=True,
+        help="do_rotation",
+    )
+    parser.add_argument(
+        "--return-all-losses",
+        type=bool,
+        action="store",
+        dest="return_all_losses",
+        default=True,
+        help="return the three terms in the loss function as well",
     )
 
     args = parser.parse_args()
