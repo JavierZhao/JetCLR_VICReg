@@ -345,13 +345,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-train-files",
         type=int,
-        default=-1,
+        default=12,
         help="Number of files to use for training",
     )
     parser.add_argument(
         "--num-val-files",
         type=int,
-        default=-1,
+        default=4,
         help="Number of files to use for validation",
     )
     parser.add_argument(
@@ -470,7 +470,7 @@ if __name__ == "__main__":
         type=bool,
         action="store",
         dest="return_all_losses",
-        default=True,
+        default=False,
         help="return the three terms in the loss function as well",
     )
 
