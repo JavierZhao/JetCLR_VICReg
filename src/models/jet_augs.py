@@ -8,9 +8,15 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch_geometric.data import Batch, Data
 
 
 def translate_jets(batch, device, width=1.0):
+    """
+    Input: batch of jets. x shape: [n_particles_total, 7]
+    dim 1 ordering: [eta, phi, log pT, log E, log pT/pT_jet, log E/E_jet, ∆R]
+    Output: batch of eta-phi translated jets, same shape as input
+    """
     bb = batch.clone()
     X = bb.x.cpu().numpy()
     ptp_eta = np.ptp(X[:, 0], axis=-1, keepdims=True)
@@ -54,6 +60,11 @@ def translate_jets(batch, device, width=1.0):
 
 
 def rotate_jets(batch, device):
+    """
+    Input: batch of jets. x shape: [n_particles_total, 7]
+    dim 1 ordering: [eta, phi, log pT, log E, log pT/pT_jet, log E/E_jet, ∆R]
+    Output: batch of jets rotated independently in eta-phi, same shape as input
+    """
     bb = batch.clone()
     rot_angle = np.random.rand(len(bb)) * 2 * np.pi
     #     print(rot_angle)
@@ -82,91 +93,118 @@ def rotate_jets(batch, device):
     return bb.to(device)
 
 
-def normalise_pts(batch):
+def normalize_pts(batch, device):
     """
-    Input: batch of jets, shape (batchsize, 3, n_constit)
-    dim 1 ordering: (pT, eta, phi)
-    Output: batch of pT-normalised jets, pT in each jet sums to 1, same shape as input
+    Input: batch of jets. x shape: [n_particles_total, 7]
+    dim 1 ordering: [eta, phi, log pT, log E, log pT/pT_jet, log E/E_jet, ∆R]
+    Output: batch of jets with pT normalized to sum to 1, same shape as input
     """
-    batch_norm = batch.copy()
-    batch_norm[:, 0, :] = np.nan_to_num(
-        batch_norm[:, 0, :] / np.sum(batch_norm[:, 0, :], axis=1)[:, np.newaxis],
-        posinf=0.0,
-        neginf=0.0,
-    )
-    return batch_norm
+    bb = batch.clone()
+    for i in range(len(bb)):
+        x_norm = bb[i].x.clone()
+        new_pt = torch.nan_to_num(
+            x_norm[:, 2] / torch.sum(x_norm[:, 2]), posinf=0.0, neginf=0.0
+        )
+
+        if i == 0:
+            new_PT = new_pt
+        else:
+            new_PT = torch.concatenate((new_PT, new_pt), axis=0)
+    new_PT = torch.tensor(new_PT).to(device)
+    bb.x[:, 2] = new_PT
+    return bb.to(device)
 
 
-def rescale_pts(batch):
+def rescale_pts(batch, device):
     """
-    Input: batch of jets, shape (batchsize, 3, n_constit)
-    dim 1 ordering: (pT, eta, phi)
+    Input: batch of jets. x shape: [n_particles_total, 7]
+    dim 1 ordering: [eta, phi, log pT, log E, log pT/pT_jet, log E/E_jet, ∆R]
     Output: batch of pT-rescaled jets, each constituent pT is rescaled by 600, same shape as input
     """
-    batch_rscl = batch.copy()
-    batch_rscl[:, 0, :] = np.nan_to_num(
-        batch_rscl[:, 0, :] / 600, posinf=0.0, neginf=0.0
-    )
-    return batch_rscl
+    bb = batch.clone()
+    x_rscl = bb.x.clone()
+    bb.x[:, 2] = torch.nan_to_num(x_rscl[:, 2] / 600, posinf=0.0, neginf=0.0)
+    return bb.to(device)
 
 
-def crop_jets(batch, nc):
+def crop_jets(batch, nc, device):
     """
-    Input: batch of jets, shape (batchsize, 3, n_constit)
-    dim 1 ordering: (pT, eta, phi)
-    Output: batch of cropped jets, each jet is cropped to nc constituents, shape (batchsize, 3, nc)
+    Input: batch of jets. x shape: [n_particles_total, 7]
+    dim 1 ordering: [eta, phi, log pT, log E, log pT/pT_jet, log E/E_jet, ∆R]
+    Output: batch of cropped jets, each jet is cropped to nc constituents, same shape as input
     """
-    batch_crop = batch.copy()
-    return batch_crop[:, :, 0:nc]
+    new_data_list = []
+    for i in range(len(batch)):
+        new_x = batch[i].x[0:nc, :]
+        jet = Data(x=new_x.to(device), y=batch[i].y.to(device))
+        new_data_list.append(jet)
+    new_batch = Batch.from_data_list(new_data_list)
+    return new_batch.to(device)
 
 
-def distort_jets(batch, strength=0.1, pT_clip_min=0.1):
+def distort_jets(batch, device, strength=0.1, pT_clip_min=0.1):
     """
-    Input: batch of jets, shape (batchsize, 3, n_constit)
-    dim 1 ordering: (pT, eta, phi)
-    Output: batch of jets with each constituents position shifted independently, shifts drawn from normal with mean 0, std strength/pT, same shape as input
+    Input: batch of jets. x shape: [n_particles_total, 7]
+    dim 1 ordering: [eta, phi, log pT, log E, log pT/pT_jet, log E/E_jet, ∆R]
+    Output: batch of jets with each constituents position shifted independently,
+            shifts drawn from normal with mean 0, std strength/pT, same shape as input
     """
-    pT = batch[:, 0]  # (batchsize, n_constit)
+    bb = batch.clone()
+    pT = bb.x[:, 2]
     shift_eta = np.nan_to_num(
-        strength
-        * np.random.randn(batch.shape[0], batch.shape[2])
-        / pT.clip(min=pT_clip_min),
+        strength * np.random.randn(bb.x.shape[0]) / pT.clip(min=pT_clip_min),
         posinf=0.0,
         neginf=0.0,
-    )  # * mask
+    )
     shift_phi = np.nan_to_num(
-        strength
-        * np.random.randn(batch.shape[0], batch.shape[2])
-        / pT.clip(min=pT_clip_min),
+        strength * np.random.randn(bb.x.shape[0]) / pT.clip(min=pT_clip_min),
         posinf=0.0,
         neginf=0.0,
-    )  # * mask
-    shift = np.stack(
-        [np.zeros((batch.shape[0], batch.shape[2])), shift_eta, shift_phi], 1
     )
-    return batch + shift
+    shift = np.hstack(
+        (
+            shift_eta.reshape(-1, 1),
+            shift_phi.reshape(-1, 1),
+            np.zeros((bb.x.shape[0], 5)),
+        )
+    )
+    new_X = bb.x + shift
+    new_X = torch.tensor(new_X).to(device)
+    bb.x = new_X
+    return bb.to(device)
 
 
-def collinear_fill_jets(batch):
+def collinear_fill_jets(batch, device, split_ratio=0.5):
     """
-    Input: batch of jets, shape (batchsize, 3, n_constit)
-    dim 1 ordering: (pT, eta, phi)
-    Output: batch of jets with collinear splittings, the function attempts to fill as many of the zero-padded args.nconstit
-    entries with collinear splittings of the constituents by splitting each constituent at most once, same shape as input
+    Input: batch of jets. x shape: [n_particles_total, 7]
+    dim 1 ordering: [eta, phi, log pT, log E, log pT/pT_jet, log E/E_jet, ∆R]
+    Output: batch of jets with collinear splittings, splitting a fraction of the jets, same shape as input
     """
-    batchb = batch.copy()
-    nc = batch.shape[2]
-    nzs = np.array(
-        [np.where(batch[:, 0, :][i] > 0.0)[0].shape[0] for i in range(len(batch))]
-    )
-    for k in range(len(batch)):
-        nzs1 = np.max([nzs[k], int(nc / 2)])
-        zs1 = int(nc - nzs1)
-        els = np.random.choice(np.linspace(0, nzs1 - 1, nzs1), size=zs1, replace=False)
-        rs = np.random.uniform(size=zs1)
-        for j in range(zs1):
-            batchb[k, 0, int(els[j])] = rs[j] * batch[k, 0, int(els[j])]
-            batchb[k, 0, int(nzs[k] + j)] = (1 - rs[j]) * batch[k, 0, int(els[j])]
-            batchb[k, 1, int(nzs[k] + j)] = batch[k, 1, int(els[j])]
-            batchb[k, 2, int(nzs[k] + j)] = batch[k, 2, int(els[j])]
-    return batchb
+    new_data_list = []
+    for i in range(len(batch)):
+        # construct a new jet
+        # for each particle, randomly decide whether to split or not, with split probability equal to split_ratio
+        new_x = []
+        for j in range(batch[i].x.shape[0]):
+            if np.random.uniform() <= split_ratio:
+                # initialize the two particles produced by collinear splitting
+                ptcl_a = batch[i].x[j].clone()
+                ptcl_b = batch[i].x[j].clone()
+                # split the pT of the particle
+                pT = batch[i].x[j, 2].item()
+                pT_a = np.random.uniform(low=0, high=pT)
+                pT_b = pT - pT_a
+                # assign the split pT to the new particles
+                ptcl_a[2] = pT_a
+                ptcl_b[2] = pT_b
+                # add the two new particles to the list
+                new_x.append(ptcl_a)
+                new_x.append(ptcl_b)
+            else:
+                # Do nothing, add the original particle to the list
+                new_x.append(batch[i].x[j])
+        #         print(new_x)
+        new_jet = Data(x=torch.stack(new_x).to(device), y=batch[i].y.to(device))
+        new_data_list.append(new_jet)
+    new_batch = Batch.from_data_list(new_data_list)
+    return new_batch.to(device)
