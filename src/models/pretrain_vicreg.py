@@ -14,7 +14,7 @@ import yaml
 from torch import nn
 
 from src.models.transformer import Transformer
-from src.models.jet_augs import translate_jets, rotate_jets
+from src.models.jet_augs import *
 
 # if torch.cuda.is_available():
 #     import setGPU  # noqa: F401
@@ -152,10 +152,16 @@ def augmentation(args, batch, device):
     """
     batch: DataBatch(x=[12329, 7], y=[batch_size], batch=[12329], ptr=[257])
     """
-    if args.do_translation:
-        batch = translate_jets(batch, device, width=1.0)
     if args.do_rotation:
         batch = rotate_jets(batch, device)
+    if args.do_cf:
+        batch = collinear_fill_jets(batch, device, split_ratio=args.split_ratio)
+    if args.do_ptd:
+        batch = distort_jets(batch, device)
+    if args.do_translation:
+        batch = translate_jets(batch, device, width=1.0)
+    if args.do_rescale:
+        batch = rescale_pts(batch, device)
     return batch.to(device)
 
 
@@ -466,6 +472,38 @@ if __name__ == "__main__":
         dest="do_rotation",
         default=True,
         help="do_rotation",
+    )
+    parser.add_argument(
+        "--do-cf",
+        type=bool,
+        action="store",
+        dest="do_cf",
+        default=True,
+        help="do collinear splitting",
+    )
+    parser.add_argument(
+        "--do-ptd",
+        type=bool,
+        action="store",
+        dest="do_ptd",
+        default=True,
+        help="do soft splitting (distort_jets)",
+    )
+    parser.add_argument(
+        "--do-rescale",
+        type=bool,
+        action="store",
+        dest="do_rescale",
+        default=True,
+        help="do rescale_pts",
+    )
+    parser.add_argument(
+        "split-ratio",
+        type=float,
+        action="store",
+        dest="split_ratio",
+        default=0.5,
+        help="split_ratio param in collinear_fill_jets",
     )
     parser.add_argument(
         "--return-all-losses",
