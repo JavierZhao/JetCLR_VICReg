@@ -1,0 +1,60 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: zz-vicreg-train-default-quick
+  labels:
+    jobgroup: vicreg-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: testing
+        image: gitlab-registry.nrp-nautilus.io/jmduarte/hbb_interaction_network:latest
+        command: ["/bin/bash"]
+        args:
+        - -c
+        - >-
+            cd /ssl-jet-vol-v2/JetCLR_VICReg &&
+            git checkout main &&
+            git pull &&
+            pip install -e . &&
+            python -m src.models.pretrain_vicreg
+            --batch-size 256
+            --epoch 50
+            --label default
+            --dataset-path "/ssl-jet-vol-v2/toptagging"
+            --num-train-files 1
+            --num-val-files 1
+            --shared False
+            --Do 1000
+            --return-all-losses True
+            | tee /ssl-jet-vol-v2/JetCLR_VICReg/logs/zz-vicreg-train-default-quick-log.txt
+        volumeMounts:
+        - mountPath: /ssl-jet-vol-v2
+          name: ssl-jet-vol-v2
+        resources:
+          limits:
+            memory: 64Gi
+            cpu: "8"
+            nvidia.com/gpu: "1"
+          requests:
+            memory: 32Gi
+            cpu: "4"
+            nvidia.com/gpu: "1"
+      volumes:
+      - name: ssl-jet-vol-v2
+        persistentVolumeClaim:
+          claimName: ssl-jet-vol-v2
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: nvidia.com/gpu.product
+                operator: In
+                values:
+                - NVIDIA-GeForce-GTX-1080
+                - NVIDIA-GeForce-GTX-1080-Ti
+                - NVIDIA-GeForce-GTX-2080-Ti
+      restartPolicy: Never
+  backoffLimit: 5
