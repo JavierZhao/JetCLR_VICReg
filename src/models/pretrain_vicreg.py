@@ -187,7 +187,7 @@ def main(args):
     args.augmentation = augmentation
 
     model_loc = f"{outdir}/trained_models/"
-    model_perf_loc = f"{outdir}/model_performances/"
+    model_perf_loc = f"{outdir}/model_performances/{label}"
     model_dict_loc = f"{outdir}/model_dicts/"
     os.system(
         f"mkdir -p {model_loc} {model_perf_loc} {model_dict_loc}"
@@ -249,6 +249,7 @@ def main(args):
             loss_train_batches.append(loss)
             loss_train_epoch.append(loss)
             pbar.set_description(f"Training loss: {loss:.4f}")
+            print(f"Training loss: {loss:.4f}")
         model.eval()
         valid_loader = DataLoader(data_valid, batch_size)
         pbar = tqdm.tqdm(valid_loader, total=val_its)
@@ -267,6 +268,7 @@ def main(args):
             loss_val_batches.append(loss)
             loss_val_epoch.append(loss)
             pbar.set_description(f"Validation loss: {loss:.4f}")
+            print(f"Validation loss: {loss:.4f}")
         l_val = np.mean(np.array(loss_val_epoch))
         l_train = np.mean(np.array(loss_train_epoch))
         loss_val_epochs.append(l_val)
@@ -294,6 +296,7 @@ def main(args):
             torch.save(model.state_dict(), f"{model_loc}/vicreg_{label}_best.pth")
         torch.save(model.state_dict(), f"{model_loc}/vicreg_{label}_last.pth")
     # After training
+
     np.save(
         f"{model_perf_loc}/vicreg_{label}_loss_train_epochs.npy",
         np.array(loss_train_epochs),
@@ -380,7 +383,7 @@ if __name__ == "__main__":
         "--De", type=int, action="store", dest="De", default=32, help="De"
     )
     parser.add_argument(
-        "--Do", type=int, action="store", dest="Do", default=64, help="Do"
+        "--Do", type=int, action="store", dest="Do", default=1000, help="Do"
     )
     parser.add_argument(
         "--hidden", type=int, action="store", dest="hidden", default=128, help="hidden"
