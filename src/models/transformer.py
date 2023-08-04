@@ -15,7 +15,7 @@ class Transformer(nn.Module):
     # define and intialize the structure of the neural network
     def __init__(
         self,
-        input_dim=7,
+        input_dim=3,
         model_dim=1000,
         output_dim=1000,
         n_heads=4,
@@ -66,70 +66,50 @@ class Transformer(nn.Module):
                 self.parameters(), lr=self.learning_rate, momentum=0.9
             )
 
-    # this version of forward() takes in two views and returns two representations
-    # def forward(self, view1, view2, mask=None, mult_reps=False):
-    #     """
-    #     the two views are shaped like DataBatch(x=[12329, 7], y=[256], batch=[12329], ptr=[257])
-    #     transformer expects (sequence_length, feature_number) so we don't need to transpose
-    #     """
-    #     view1_representations, view2_representations = [], []
-    #     assert len(view1) == len(view2)
-    #     # produce one representation per jet
-    #     for i in range(len(view1)):
-    #         jet1 = view1[i]
-    #         jet2 = view2[i]
-    #         # make a copy
-    #         x_1 = jet1.x + 0.0
-    #         x_2 = jet2.x + 0.0
-    #         # cast to torch.float32 to prevent RuntimeError: mat1 and mat2 must have the same dtype
-    #         x_1 = x_1.to(torch.float32)
-    #         x_2 = x_2.to(torch.float32)
-    #         # embedding
-    #         x_1 = self.embedding(x_1)
-    #         x_2 = self.embedding(x_2)
-    #         # transformer
-    #         x_1 = self.transformer(x_1, mask=mask)
-    #         x_2 = self.transformer(x_2, mask=mask)
-    #         # sum over sequence dim
-    #         # (batch_size, model_dim)
-    #         x_1 = x_1.sum(0)
-    #         x_2 = x_2.sum(0)
-    #         # head
-    #         x_1 = self.head(x_1, mult_reps)
-    #         x_2 = self.head(x_2, mult_reps)
-    #         # append to representations list
-    #         view1_representations.append(x_1)
-    #         view2_representations.append(x_2)
-
-    #     return torch.stack(view1_representations), torch.stack(view2_representations)
-
-    # this version of forward() takes in one view and returns one representation
-    def forward(self, view1, mask=None, mult_reps=False):
+    def forward(
+        self,
+        inpt,
+        mask=None,
+        use_mask=False,
+        use_continuous_mask=False,
+        mult_reps=False,
+    ):
         """
-        the two views are shaped like DataBatch(x=[12329, 7], y=[256], batch=[12329], ptr=[257])
-        transformer expects (sequence_length, feature_number) so we don't need to transpose
+        input here is (batch_size, n_constit, 3)
+        but transformer expects (n_constit, batch_size, 3) so we need to transpose
+        if use_mask is True, will mask out all inputs with pT=0
         """
-        view1_representations = []
-        # produce one representation per jet
-        for i in range(len(view1)):
-            jet1 = view1[i]
-            # make a copy
-            x_1 = jet1.x + 0.0
-            # cast to torch.float32 to prevent RuntimeError: mat1 and mat2 must have the same dtype
-            x_1 = x_1.to(torch.float32)
-            # embedding
-            x_1 = self.embedding(x_1)
-            # transformer
-            x_1 = self.transformer(x_1, mask=mask)
-            # sum over sequence dim
-            # (batch_size, model_dim)
-            x_1 = x_1.sum(0)
-            # head
-            x_1 = self.head(x_1, mult_reps)
-            # append to representations list
-            view1_representations.append(x_1)
-
-        return torch.stack(view1_representations)
+        assert not (use_mask and use_continuous_mask)
+        # make a copy
+        x = inpt + 0.0
+        # (batch_size, n_constit)
+        if use_mask:
+            pT_zero = x[:, :, 0] == 0
+        # (batch_size, n_constit)
+        if use_continuous_mask:
+            pT = x[:, :, 0]
+        if use_mask:
+            mask = self.make_mask(pT_zero).to(x.device)
+        elif use_continuous_mask:
+            mask = self.make_continuous_mask(pT).to(x.device)
+        else:
+            mask = None
+        x = torch.transpose(x, 0, 1)
+        # (n_constit, batch_size, model_dim)
+        x = self.embedding(x)
+        x = self.transformer(x, mask=mask)
+        if use_mask:
+            # set masked constituents to zero
+            # otherwise the sum will change if the constituents with 0 pT change
+            x[torch.transpose(pT_zero, 0, 1)] = 0
+        elif use_continuous_mask:
+            # scale x by pT, so that function is IR safe
+            # transpose first to get correct shape
+            x *= torch.transpose(pT, 0, 1)[:, :, None]
+        # sum over sequence dim
+        # (batch_size, model_dim)
+        x = x.sum(0)
+        return self.head(x, mult_reps)
 
     def head(self, x, mult_reps):
         """
@@ -171,3 +151,58 @@ class Transformer(nn.Module):
                 x = layer(x)
             # shape either (model_dim) if no head, or (output_dim) if head exists
             return x
+
+    def forward_batchwise(
+        self, x, batch_size, use_mask=False, use_continuous_mask=False
+    ):
+        device = next(self.parameters()).device
+        with torch.no_grad():
+            if self.n_head_layers == 0:
+                rep_dim = self.model_dim
+                number_of_reps = 1
+            elif self.n_head_layers > 0:
+                rep_dim = self.output_dim
+                number_of_reps = self.n_head_layers + 1
+            out = torch.empty(x.size(0), number_of_reps, rep_dim)
+            idx_list = torch.split(torch.arange(x.size(0)), batch_size)
+            for idx in idx_list:
+                output = (
+                    self(
+                        x[idx].to(device),
+                        use_mask=use_mask,
+                        use_continuous_mask=use_continuous_mask,
+                        mult_reps=True,
+                    )
+                    .detach()
+                    .cpu()
+                )
+                out[idx] = output
+        return out
+
+    def make_mask(self, pT_zero):
+        """
+        Input: batch of bools of whether pT=0, shape (batchsize, n_constit)
+        Output: mask for transformer model which masks out constituents with pT=0, shape (batchsize*n_transformer_heads, n_constit, n_constit)
+        mask is added to attention output before softmax: 0 means value is unchanged, -inf means it will be masked
+        """
+        n_constit = pT_zero.size(1)
+        pT_zero = torch.repeat_interleave(pT_zero, self.n_heads, axis=0)
+        pT_zero = torch.repeat_interleave(pT_zero[:, None], n_constit, axis=1)
+        mask = torch.zeros(pT_zero.size(0), n_constit, n_constit)
+        mask[pT_zero] = -np.inf
+        return mask
+
+    def make_continuous_mask(self, pT):
+        """
+        Input: batch of pT values, shape (batchsize, n_constit)
+        Output: mask for transformer model: -1/pT, shape (batchsize*n_transformer_heads, n_constit, n_constit)
+        mask is added to attention output before softmax: 0 means value is unchanged, -inf means it will be masked
+        intermediate values mean it is partly masked
+        This function implements IR safety in the transformer
+        """
+        n_constit = pT.size(1)
+        pT_reshape = torch.repeat_interleave(pT, self.n_heads, axis=0)
+        pT_reshape = torch.repeat_interleave(pT_reshape[:, None], n_constit, axis=1)
+        # mask = -1/pT_reshape
+        mask = 0.5 * torch.log(pT_reshape)
+        return mask
