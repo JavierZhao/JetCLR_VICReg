@@ -64,36 +64,43 @@ class VICReg(nn.Module):
             self.x_projector if args.shared else copy.deepcopy(self.x_projector)
         )
 
-    def forward(self, x, y):
+    def forward(self, x):
         """
-        x -> x_aug -> x_xform -> x_rep -> x_emb
-        y -> y_aug -> y_xform -> y_rep -> y_emb
+        x -> x_aug -> (x_xform) -> x_rep -> x_emb
+        y -> y_aug -> (y_xform) -> y_rep -> y_emb
         _aug: augmented
-        _xform: transformed by linear layer
+        _xform: transformed by linear layer (skipped because it destroys the zero padding)
         _rep: backbone representation
         _emb: projected embedding
         """
-        # x: [N_x, x_inputs]
-        # y: [N_y, y_inputs]
-        x_aug = self.augmentation(self.args, x, self.args.device)
-        y_aug = self.augmentation(self.args, y, self.args.device)
+        x_aug, y_aug = self.augmentation(
+            self.args, x, self.args.device
+        )  # [batch_size, n_constit, 3]
+#         print(f"x_aug contains nan: {contains_nan(x_aug)}")
+#         print(f"y_aug contains nan: {contains_nan(y_aug)}")
 
-        x_xform = x_aug
-        y_xform = y_aug
-        x_xform.x = self.x_transform.to(torch.double)(
-            x_aug.x.double()
-        )  # [N_x, transform_inputs]?
-        y_xform.x = self.y_transform.to(torch.double)(
-            y_aug.x.double()
-        )  # [N_y, transform_inputs]?
+        # x_xform = self.x_transform.to(torch.double)(
+        #     x_aug.x.double()
+        # )  # [batch_size, n_constit, transform_inputs]?
+        # y_xform = self.y_transform.to(torch.double)(
+        #     y_aug.x.double()
+        # )  # [batch_size, n_constit, transform_inputs]?
 
-        x_rep = self.x_backbone(x_aug)  # [batch_size, output_dim]
-        y_rep = self.y_backbone(y_aug)  # [batch_size, output_dim]
+        x_rep = self.x_backbone(
+            x_aug, use_mask=self.args.mask, use_continuous_mask=self.args.cmask
+        )  # [batch_size, output_dim]
+        y_rep = self.y_backbone(
+            y_aug, use_mask=self.args.mask, use_continuous_mask=self.args.cmask
+        )  # [batch_size, output_dim]
+#         print(f"x_rep contains nan: {contains_nan(x_rep)}")
+#         print(f"y_rep contains nan: {contains_nan(y_rep)}")
         if self.return_representation:
             return x_rep, y_rep
 
         x_emb = self.x_projector(x_rep)  # [batch_size, embedding_size]
         y_emb = self.y_projector(y_rep)  # [batch_size, embedding_size]
+#         print(f"x_emb contains nan: {contains_nan(x_emb)}")
+#         print(f"y_emb contains nan: {contains_nan(y_emb)}")
         if self.return_embedding:
             return x_emb, y_emb
         x = x_emb
@@ -143,26 +150,34 @@ def off_diagonal(x):
 
 
 def get_backbones(args):
-    x_backbone = Transformer(input_dim=args.transform_inputs)
+    x_backbone = Transformer(input_dim=args.x_inputs)
     y_backbone = x_backbone if args.shared else copy.deepcopy(x_backbone)
     return x_backbone, y_backbone
 
 
-def augmentation(args, batch, device):
+def augmentation(args, x, device):
     """
-    batch: DataBatch(x=[12329, 7], y=[batch_size], batch=[12329], ptr=[257])
+    Applies all the augmentations specified in the args
     """
+    # crop all jets to a fixed number of constituents (default=50)
+    x = crop_jets(x, args.nconstit)
+    x = rotate_jets(x, device)
+    y = x.clone()
     if args.do_rotation:
-        batch = rotate_jets(batch, device)
+        y = rotate_jets(y, device)
     if args.do_cf:
-        batch = collinear_fill_jets(batch, device, split_ratio=args.split_ratio)
+        y = collinear_fill_jets(np.array(y.cpu()), device)
+        y = collinear_fill_jets(np.array(y.cpu()), device)
     if args.do_ptd:
-        batch = distort_jets(batch, device)
+        y = distort_jets(y, device, strength=args.ptst, pT_clip_min=args.ptcm)
     if args.do_translation:
-        batch = translate_jets(batch, device, width=1.0)
-    if args.do_rescale:
-        batch = rescale_pts(batch, device)
-    return batch.to(device)
+        y = translate_jets(y, device, width=args.trsw)
+        x = translate_jets(x, device, width=args.trsw)
+    x = rescale_pts(x)  # [batch_size, 3, n_constit]
+    y = rescale_pts(y)  # [batch_size, 3, n_constit]
+    x = x.transpose(1, 2)  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
+    y = y.transpose(1, 2)  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
+    return x, y
 
 
 # load the datafiles
@@ -180,11 +195,22 @@ def load_data(dataset_path, flag, n_files=-1):
 
 
 def main(args):
+    # define the global base device
+    world_size = torch.cuda.device_count()
+    if world_size:
+        device = torch.device("cuda:0")
+        for i in range(world_size):
+            print(f"Device {i}: {torch.cuda.get_device_name(i)}")
+    else:
+        device = "cpu"
+        print("Device: CPU")
+    args.device = device
+    
     n_epochs = args.epoch
     batch_size = args.batch_size
     outdir = args.outdir
     label = args.label
-    args.augmentation = augmentation
+
 
     model_loc = f"{outdir}/trained_models/"
     model_perf_loc = f"{outdir}/model_performances/{label}"
@@ -199,9 +225,11 @@ def main(args):
 
     n_train = len(data_train)
     n_val = len(data_valid)
+    
+    args.augmentation = augmentation
 
-    args.x_inputs = 7
-    args.y_inputs = 7
+    args.x_inputs = 3
+    args.y_inputs = 3
 
     args.x_backbone, args.y_backbone = get_backbones(args)
     model = VICReg(args).to(args.device)
@@ -231,46 +259,49 @@ def main(args):
         train_loader = DataLoader(data_train, batch_size)
         model.train()
         pbar = tqdm.tqdm(train_loader, total=train_its)
-        for _, batch in tqdm.tqdm(enumerate(train_loader)):
+    #     for _, batch in tqdm.tqdm(enumerate(train_loader)):
+        for _, batch in enumerate(pbar):
             batch = batch.to(args.device)
+            batch = convert_x(batch, args.device)
             optimizer.zero_grad()
             if args.return_all_losses:
-                loss, repr_loss, std_loss, cov_loss = model.forward(
-                    batch, copy.deepcopy(batch)
-                )
+                loss, repr_loss, std_loss, cov_loss = model.forward(batch)
+    #             print(loss, repr_loss, std_loss, cov_loss)
                 repr_loss_train_epoch.append(repr_loss.detach().cpu().item())
                 std_loss_train_epoch.append(std_loss.detach().cpu().item())
                 cov_loss_train_epoch.append(cov_loss.detach().cpu().item())
             else:
-                loss = model.forward(batch, copy.deepcopy(batch))
+                loss = model.forward(batch)
             loss.backward()
             optimizer.step()
             loss = loss.detach().cpu().item()
             loss_train_batches.append(loss)
             loss_train_epoch.append(loss)
             pbar.set_description(f"Training loss: {loss:.4f}")
-            print(f"Training loss: {loss:.4f}")
+#             print(f"Training loss: {loss:.4f}")
+        l_train = np.mean(np.array(loss_train_epoch))
+        print(f"Training loss: {l_train:.4f}")
         model.eval()
         valid_loader = DataLoader(data_valid, batch_size)
         pbar = tqdm.tqdm(valid_loader, total=val_its)
-        for _, batch in tqdm.tqdm(enumerate(valid_loader)):
+    #     for _, batch in tqdm.tqdm(enumerate(valid_loader)):
+        for _, batch in enumerate(pbar):
             batch = batch.to(args.device)
+            batch = convert_x(batch, args.device)  # [batch_size, 3, n_constit]
             if args.return_all_losses:
-                loss, repr_loss, std_loss, cov_loss = model.forward(
-                    batch, copy.deepcopy(batch)
-                )
+                loss, repr_loss, std_loss, cov_loss = model.forward(batch)
                 repr_loss_val_epoch.append(repr_loss.detach().cpu().item())
                 std_loss_val_epoch.append(std_loss.detach().cpu().item())
                 cov_loss_val_epoch.append(cov_loss.detach().cpu().item())
                 loss = loss.detach().cpu().item()
             else:
-                loss = model.forward(batch, batch.deepcopy()).cpu().item()
+                loss = model.forward(batch).cpu().item()
             loss_val_batches.append(loss)
             loss_val_epoch.append(loss)
             pbar.set_description(f"Validation loss: {loss:.4f}")
-            print(f"Validation loss: {loss:.4f}")
+#             print(f"Validation loss: {loss:.4f}")
         l_val = np.mean(np.array(loss_val_epoch))
-        l_train = np.mean(np.array(loss_train_epoch))
+        print(f"Validation loss: {l_val:.4f}")
         loss_val_epochs.append(l_val)
         loss_train_epochs.append(l_train)
 

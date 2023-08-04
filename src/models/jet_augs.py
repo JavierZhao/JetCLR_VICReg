@@ -12,7 +12,7 @@ import torch_geometric
 from torch_geometric.data import Batch, Data
 
 
-def translate_jets(batch, width=1.0):
+def translate_jets(batch, device, width=1.0):
     """
     Input: batch of jets, shape (batchsize, 3, n_constit)
     dim 1 ordering: (pT, eta, phi)
@@ -47,13 +47,13 @@ def translate_jets(batch, width=1.0):
     shift_phi = mask * (torch.rand_like(low_phi) * (high_phi - low_phi) + low_phi)
     shift = torch.stack(
         [torch.zeros_like(shift_eta), shift_eta, shift_phi], dim=1
-    ).squeeze()
+    ).squeeze().to(device)
 
     shifted_batch = batch + shift
     return shifted_batch
 
 
-def rotate_jets(batch):
+def rotate_jets(batch, device):
     """
     Input: batch of jets, shape (batchsize, 3, n_constit)
     dim 1 ordering: (pT, eta, phi)
@@ -68,7 +68,7 @@ def rotate_jets(batch):
         torch.stack([o, z, z, z, c, -s, z, s, c], dim=1)
         .reshape(-1, 3, 3)
         .transpose(0, 2)
-    )  # (batchsize, 3, 3)
+    ).to(device)  # (batchsize, 3, 3)
     return torch.einsum("ijk,lji->ilk", batch, rot_matrix)
 
 
@@ -109,7 +109,7 @@ def crop_jets(batch, nc=50):
     return batch_crop[:, :, 0:nc]
 
 
-def distort_jets(batch, strength=0.1, pT_clip_min=0.1):
+def distort_jets(batch, device, strength=0.1, pT_clip_min=0.1):
     """
     Input: batch of jets, shape (batchsize, 3, n_constit)
     dim 1 ordering: (pT, eta, phi)
@@ -129,11 +129,11 @@ def distort_jets(batch, strength=0.1, pT_clip_min=0.1):
     shift_phi = torch.nan_to_num(shift_phi, posinf=0.0, neginf=0.0)
 
     zeros_tensor = torch.zeros_like(shift_eta)
-    shift = torch.stack([zeros_tensor, shift_eta, shift_phi], dim=1)
+    shift = torch.stack([zeros_tensor, shift_eta, shift_phi], dim=1).to(device)
     return batch + shift
 
 
-def collinear_fill_jets(batch):
+def collinear_fill_jets(batch, device):
     """
     Input: batch of jets, shape (batchsize, 3, n_constit)
     dim 1 ordering: (pT, eta, phi)
