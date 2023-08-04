@@ -76,8 +76,8 @@ class VICReg(nn.Module):
         x_aug, y_aug = self.augmentation(
             self.args, x, self.args.device
         )  # [batch_size, n_constit, 3]
-#         print(f"x_aug contains nan: {contains_nan(x_aug)}")
-#         print(f"y_aug contains nan: {contains_nan(y_aug)}")
+        #         print(f"x_aug contains nan: {contains_nan(x_aug)}")
+        #         print(f"y_aug contains nan: {contains_nan(y_aug)}")
 
         # x_xform = self.x_transform.to(torch.double)(
         #     x_aug.x.double()
@@ -92,15 +92,15 @@ class VICReg(nn.Module):
         y_rep = self.y_backbone(
             y_aug, use_mask=self.args.mask, use_continuous_mask=self.args.cmask
         )  # [batch_size, output_dim]
-#         print(f"x_rep contains nan: {contains_nan(x_rep)}")
-#         print(f"y_rep contains nan: {contains_nan(y_rep)}")
+        #         print(f"x_rep contains nan: {contains_nan(x_rep)}")
+        #         print(f"y_rep contains nan: {contains_nan(y_rep)}")
         if self.return_representation:
             return x_rep, y_rep
 
         x_emb = self.x_projector(x_rep)  # [batch_size, embedding_size]
         y_emb = self.y_projector(y_rep)  # [batch_size, embedding_size]
-#         print(f"x_emb contains nan: {contains_nan(x_emb)}")
-#         print(f"y_emb contains nan: {contains_nan(y_emb)}")
+        #         print(f"x_emb contains nan: {contains_nan(x_emb)}")
+        #         print(f"y_emb contains nan: {contains_nan(y_emb)}")
         if self.return_embedding:
             return x_emb, y_emb
         x = x_emb
@@ -205,12 +205,11 @@ def main(args):
         device = "cpu"
         print("Device: CPU")
     args.device = device
-    
+
     n_epochs = args.epoch
     batch_size = args.batch_size
     outdir = args.outdir
     label = args.label
-
 
     model_loc = f"{outdir}/trained_models/"
     model_perf_loc = f"{outdir}/model_performances/{label}"
@@ -225,7 +224,7 @@ def main(args):
 
     n_train = len(data_train)
     n_val = len(data_valid)
-    
+
     args.augmentation = augmentation
 
     args.x_inputs = 3
@@ -259,14 +258,14 @@ def main(args):
         train_loader = DataLoader(data_train, batch_size)
         model.train()
         pbar = tqdm.tqdm(train_loader, total=train_its)
-    #     for _, batch in tqdm.tqdm(enumerate(train_loader)):
+        #     for _, batch in tqdm.tqdm(enumerate(train_loader)):
         for _, batch in enumerate(pbar):
             batch = batch.to(args.device)
             batch = convert_x(batch, args.device)
             optimizer.zero_grad()
             if args.return_all_losses:
                 loss, repr_loss, std_loss, cov_loss = model.forward(batch)
-    #             print(loss, repr_loss, std_loss, cov_loss)
+                #             print(loss, repr_loss, std_loss, cov_loss)
                 repr_loss_train_epoch.append(repr_loss.detach().cpu().item())
                 std_loss_train_epoch.append(std_loss.detach().cpu().item())
                 cov_loss_train_epoch.append(cov_loss.detach().cpu().item())
@@ -278,13 +277,13 @@ def main(args):
             loss_train_batches.append(loss)
             loss_train_epoch.append(loss)
             pbar.set_description(f"Training loss: {loss:.4f}")
-#             print(f"Training loss: {loss:.4f}")
+        #             print(f"Training loss: {loss:.4f}")
         l_train = np.mean(np.array(loss_train_epoch))
         print(f"Training loss: {l_train:.4f}")
         model.eval()
         valid_loader = DataLoader(data_valid, batch_size)
         pbar = tqdm.tqdm(valid_loader, total=val_its)
-    #     for _, batch in tqdm.tqdm(enumerate(valid_loader)):
+        #     for _, batch in tqdm.tqdm(enumerate(valid_loader)):
         for _, batch in enumerate(pbar):
             batch = batch.to(args.device)
             batch = convert_x(batch, args.device)  # [batch_size, 3, n_constit]
@@ -299,7 +298,7 @@ def main(args):
             loss_val_batches.append(loss)
             loss_val_epoch.append(loss)
             pbar.set_description(f"Validation loss: {loss:.4f}")
-#             print(f"Validation loss: {loss:.4f}")
+        #             print(f"Validation loss: {loss:.4f}")
         l_val = np.mean(np.array(loss_val_epoch))
         print(f"Validation loss: {l_val:.4f}")
         loss_val_epochs.append(l_val)
@@ -427,6 +426,20 @@ if __name__ == "__main__":
         help="share parameters of backbone",
     )
     parser.add_argument(
+        "--mask",
+        type=bool,
+        action="store",
+        default=False,
+        help="use mask in transformer",
+    )
+    parser.add_argument(
+        "--cmask",
+        type=bool,
+        action="store",
+        default=True,
+        help="use continuous mask in transformer",
+    )
+    parser.add_argument(
         "--epoch", type=int, action="store", dest="epoch", default=200, help="Epochs"
     )
     parser.add_argument(
@@ -445,13 +458,13 @@ if __name__ == "__main__":
         default=1024,
         help="batch_size",
     )
-    parser.add_argument(
-        "--device",
-        action="store",
-        dest="device",
-        default="cuda",
-        help="device to train gnn; follow pytorch convention",
-    )
+    # parser.add_argument(
+    #     "--device",
+    #     action="store",
+    #     dest="device",
+    #     default="cuda",
+    #     help="device to train gnn; follow pytorch convention",
+    # )
     parser.add_argument(
         "--mlp",
         default="256-256-256",
@@ -524,20 +537,36 @@ if __name__ == "__main__":
         help="do soft splitting (distort_jets)",
     )
     parser.add_argument(
-        "--do-rescale",
-        type=bool,
+        "--nconstit",
+        type=int,
         action="store",
-        dest="do_rescale",
-        default=True,
-        help="do rescale_pts",
+        dest="nconstit",
+        default=50,
+        help="number of constituents per jet",
     )
     parser.add_argument(
-        "split-ratio",
+        "--ptst",
         type=float,
         action="store",
-        dest="split_ratio",
-        default=0.5,
-        help="split_ratio param in collinear_fill_jets",
+        dest="ptst",
+        default=0.1,
+        help="strength param in distort_jets",
+    )
+    parser.add_argument(
+        "--ptcm",
+        type=float,
+        action="store",
+        dest="ptcm",
+        default=0.1,
+        help="pT_clip_min param in distort_jets",
+    )
+    parser.add_argument(
+        "--trsw",
+        type=float,
+        action="store",
+        dest="trsw",
+        default=1.0,
+        help="width param in translate_jets",
     )
     parser.add_argument(
         "--return-all-losses",
