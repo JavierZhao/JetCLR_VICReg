@@ -15,6 +15,7 @@ from torch import nn
 
 from src.models.transformer import Transformer
 from src.models.jet_augs import *
+from src.data.convert_data import convert_x
 
 # if torch.cuda.is_available():
 #     import setGPU  # noqa: F401
