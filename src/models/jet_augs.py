@@ -8,8 +8,6 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch_geometric
-from torch_geometric.data import Batch, Data
 
 
 def translate_jets(batch, device, width=1.0):
@@ -45,9 +43,11 @@ def translate_jets(batch, device, width=1.0):
 
     shift_eta = mask * (torch.rand_like(low_eta) * (high_eta - low_eta) + low_eta)
     shift_phi = mask * (torch.rand_like(low_phi) * (high_phi - low_phi) + low_phi)
-    shift = torch.stack(
-        [torch.zeros_like(shift_eta), shift_eta, shift_phi], dim=1
-    ).squeeze().to(device)
+    shift = (
+        torch.stack([torch.zeros_like(shift_eta), shift_eta, shift_phi], dim=1)
+        .squeeze()
+        .to(device)
+    )
 
     shifted_batch = batch + shift
     return shifted_batch
@@ -68,7 +68,9 @@ def rotate_jets(batch, device):
         torch.stack([o, z, z, z, c, -s, z, s, c], dim=1)
         .reshape(-1, 3, 3)
         .transpose(0, 2)
-    ).to(device)  # (batchsize, 3, 3)
+    ).to(
+        device
+    )  # (batchsize, 3, 3)
     return torch.einsum("ijk,lji->ilk", batch, rot_matrix)
 
 
