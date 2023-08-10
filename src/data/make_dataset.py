@@ -99,9 +99,13 @@ def main(args):
     processed_dir = f"/ssl-jet-vol-v2/toptagging/{label}/processed/3_features"
     os.system(f"mkdir -p {processed_dir}")
     for jet_index in range(len(df)):
-        pt = zero_pad(torch.from_numpy(part_pt[jet_index].reshape(-1, 1)))
-        deta = zero_pad(torch.from_numpy(v["part_deta"][jet_index].reshape(-1, 1)))
-        dphi = zero_pad(torch.from_numpy(v["part_dphi"][jet_index].reshape(-1, 1)))
+        pt = zero_pad(torch.from_numpy(np.array(part_pt[jet_index]).reshape(-1, 1)))
+        deta = zero_pad(
+            torch.from_numpy(np.array(v["part_deta"][jet_index]).reshape(-1, 1))
+        )
+        dphi = zero_pad(
+            torch.from_numpy(np.array(v["part_dphi"][jet_index]).reshape(-1, 1))
+        )
 
         jet = torch.cat([pt, deta, dphi], axis=1).transpose(0, 1)
         y = torch.tensor(v["label"][jet_index]).long()
