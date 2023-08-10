@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
-from torch_geometric.loader import DataLoader
+from torch.utils.data import DataLoader
 import tqdm
 import yaml
 from torch import nn
@@ -183,11 +183,11 @@ def augmentation(args, x, device):
 
 # load the datafiles
 def load_data(dataset_path, flag, n_files=-1):
-    data_files = glob.glob(f"{dataset_path}/{flag}/processed/*")
+    data_files = glob.glob(f"{dataset_path}/{flag}/processed/3_features/*")
 
     data = []
     for i, file in enumerate(data_files):
-        data += torch.load(f"{dataset_path}/{flag}/processed/data_{i}.pt")
+        data += torch.load(f"{dataset_path}/{flag}/processed/3_features/data_{i}.pt")
         print(f"--- loaded file {i} from `{flag}` directory")
         if n_files != -1 and i == n_files - 1:
             break
@@ -259,10 +259,9 @@ def main(args):
         train_loader = DataLoader(data_train, batch_size)
         model.train()
         pbar = tqdm.tqdm(train_loader, total=train_its)
-        #     for _, batch in tqdm.tqdm(enumerate(train_loader)):
         for _, batch in enumerate(pbar):
             batch = batch.to(args.device)
-            batch = convert_x(batch, args.device)
+            # batch = convert_x(batch, args.device)
             optimizer.zero_grad()
             if args.return_all_losses:
                 loss, repr_loss, std_loss, cov_loss = model.forward(batch)
@@ -287,7 +286,7 @@ def main(args):
         #     for _, batch in tqdm.tqdm(enumerate(valid_loader)):
         for _, batch in enumerate(pbar):
             batch = batch.to(args.device)
-            batch = convert_x(batch, args.device)  # [batch_size, 3, n_constit]
+            # batch = convert_x(batch, args.device)  # [batch_size, 3, n_constit]
             if args.return_all_losses:
                 loss, repr_loss, std_loss, cov_loss = model.forward(batch)
                 repr_loss_val_epoch.append(repr_loss.detach().cpu().item())
@@ -430,14 +429,14 @@ if __name__ == "__main__":
         "--mask",
         type=bool,
         action="store",
-        default=True,
+        default=False,
         help="use mask in transformer",
     )
     parser.add_argument(
         "--cmask",
         type=bool,
         action="store",
-        default=False,
+        default=True,
         help="use continuous mask in transformer",
     )
     parser.add_argument(
