@@ -38,7 +38,9 @@ def main(args):
     hdf5_file = f"/ssl-jet-vol-v2/toptagging/{label}/raw/{label}.h5"
     vector.register_awkward()
 
+    print("reading h5 file")
     df = pd.read_hdf(hdf5_file, key="table")
+    print("finished reading h5 file")
 
     def _col_list(prefix, max_particles=200):
         return ["%s_%d" % (prefix, i) for i in range(max_particles)]
