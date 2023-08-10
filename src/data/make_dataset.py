@@ -108,6 +108,7 @@ def main(args):
 
         features.append(jet)
         labels.append(y)
+        print("success")
 
         if jet_index % 100000 == 0 and jet_index != 0:
             print(f"saving datafile data_{c}")
