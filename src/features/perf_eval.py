@@ -72,7 +72,7 @@ def linear_classifier_test(
             x = reps_tr_in[indices, :]
             l = trlab_in[indices]
             x = torch.Tensor(x).view(-1, linear_input_size).to(xdevice)
-            l = torch.Tensor(l).view(-1, 1).to(xdevice)
+            l = torch.Tensor(l).float().view(-1, 1).to(xdevice)
             z = sigmoid(fcn_linear(x)).to(xdevice)
             loss = bce_loss(z, l).to(xdevice)
             loss.backward()
