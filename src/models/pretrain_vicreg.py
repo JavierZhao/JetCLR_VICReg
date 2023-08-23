@@ -250,6 +250,10 @@ def main(args):
     labels_train = load_labels(args.dataset_path, "train", n_files=args.num_train_files)
     labels_test = load_labels(args.dataset_path, "test", n_files=1)
 
+    # only take the first 10k jets for LCT
+    labels_train = labels_train[:10000]
+    labels_test = labels_test[:10000]
+
     labels_train = torch.tensor([t.item() for t in labels_train])
     labels_test = torch.tensor([t.item() for t in labels_test])
 
@@ -390,7 +394,7 @@ def main(args):
             linear_input_size = tr_reps.shape[1]
             linear_n_epochs = 750
             linear_learning_rate = 0.001
-            linear_batch_size = 1024
+            linear_batch_size = 1000
             out_dat_f, out_lbs_f, losses_f = linear_classifier_test(
                 linear_input_size,
                 linear_batch_size,
