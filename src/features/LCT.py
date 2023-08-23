@@ -22,14 +22,6 @@ from torch.utils.data import DataLoader
 
 
 # load custom modules required for jetCLR training
-from src.models.jet_augs import (
-    rotate_jets,
-    distort_jets,
-    rescale_pts,
-    crop_jets,
-    translate_jets,
-    collinear_fill_jets,
-)
 from src.models.transformer import Transformer
 from src.features.perf_eval import get_perf_stats, linear_classifier_test
 from src.models.pretrain_vicreg import VICReg
@@ -74,22 +66,7 @@ def augmentation(args, x, device):
     """
     Applies all the augmentations specified in the args
     """
-    # crop all jets to a fixed number of constituents (default=50)
-    x = crop_jets(x, args.nconstit)
-    x = rotate_jets(x, device)
     y = x.clone()
-    if args.do_rotation:
-        y = rotate_jets(y, device)
-    if args.do_cf:
-        y = collinear_fill_jets(np.array(y.cpu()), device)
-        y = collinear_fill_jets(np.array(y.cpu()), device)
-    if args.do_ptd:
-        y = distort_jets(y, device, strength=args.ptst, pT_clip_min=args.ptcm)
-    if args.do_translation:
-        y = translate_jets(y, device, width=args.trsw)
-        x = translate_jets(x, device, width=args.trsw)
-    x = rescale_pts(x)  # [batch_size, 3, n_constit]
-    y = rescale_pts(y)  # [batch_size, 3, n_constit]
     x = x.transpose(1, 2)  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
     y = y.transpose(1, 2)  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
     return x, y
@@ -281,7 +258,7 @@ if __name__ == "__main__":
         action="store",
         dest="label",
         default="new",
-        help="a label for the model",
+        help="a label for the model used for inference",
     )
     parser.add_argument(
         "--batch-size",
