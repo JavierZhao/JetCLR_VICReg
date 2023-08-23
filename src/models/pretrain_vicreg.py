@@ -292,8 +292,8 @@ def main(args):
 
         train_loader = DataLoader(data_train, batch_size)
         model.train()
-        pbar = tqdm.tqdm(train_loader, total=train_its)
-        for _, batch in enumerate(pbar):
+        pbar_t = tqdm.tqdm(train_loader, total=train_its)
+        for _, batch in enumerate(pbar_t):
             batch = batch.to(args.device)
             # batch = convert_x(batch, args.device)
             optimizer.zero_grad()
@@ -310,16 +310,16 @@ def main(args):
             loss = loss.detach().cpu().item()
             loss_train_batches.append(loss)
             loss_train_epoch.append(loss)
-            pbar.set_description(f"Training loss: {loss:.4f}")
+            pbar_t.set_description(f"Training loss: {loss:.4f}")
         #             print(f"Training loss: {loss:.4f}")
         l_train = np.mean(np.array(loss_train_epoch))
         print(f"Training loss: {l_train:.4f}")
         model.eval()
         valid_loader = DataLoader(data_valid, batch_size)
-        pbar = tqdm.tqdm(valid_loader, total=val_its)
+        pbar_v = tqdm.tqdm(valid_loader, total=val_its)
         #     for _, batch in tqdm.tqdm(enumerate(valid_loader)):
         with torch.no_grad():
-            for _, batch in enumerate(pbar):
+            for _, batch in enumerate(pbar_v):
                 batch = batch.to(args.device)
                 # batch = convert_x(batch, args.device)  # [batch_size, 3, n_constit]
                 if args.return_all_losses:
@@ -332,7 +332,7 @@ def main(args):
                     loss = model.forward(batch).cpu().item()
                 loss_val_batches.append(loss)
                 loss_val_epoch.append(loss)
-                pbar.set_description(f"Validation loss: {loss:.4f}")
+                pbar_v.set_description(f"Validation loss: {loss:.4f}")
         #             print(f"Validation loss: {loss:.4f}")
         l_val = np.mean(np.array(loss_val_epoch))
         print(f"Validation loss: {l_val:.4f}")
@@ -369,24 +369,24 @@ def main(args):
                 test_loader = DataLoader(data_test[:10000], args.batch_size)
                 tr_reps = []
                 batch_size = args.batch_size
-                train_its = int(10000 / batch_size)
-                test_its = int(10000 / batch_size)
-                pbar = tqdm.tqdm(train_loader, total=train_its)
-                for i, batch in enumerate(pbar):
+                # train_its = int(10000 / batch_size)
+                # test_its = int(10000 / batch_size)
+                # pbar = tqdm.tqdm(train_loader, total=train_its)
+                for i, batch in enumerate(train_loader):
                     batch = batch.to(args.device)
                     tr_reps.append(
                         model(batch, return_rep=True)[0].detach().cpu().numpy()
                     )
-                    pbar.set_description(f"{i}")
+                    # pbar.set_description(f"{i}")
                 tr_reps = np.concatenate(tr_reps)
                 te_reps = []
-                pbar = tqdm.tqdm(test_loader, total=test_its)
-                for i, batch in enumerate(pbar):
+                # pbar = tqdm.tqdm(test_loader, total=test_its)
+                for i, batch in enumerate(test_loader):
                     batch = batch.to(args.device)
                     te_reps.append(
                         model(batch, return_rep=True)[0].detach().cpu().numpy()
                     )
-                    pbar.set_description(f"{i}")
+                    # pbar.set_description(f"{i}")
                 te_reps = np.concatenate(te_reps)
 
             # perform the linear classifier test (LCT) on the representations
