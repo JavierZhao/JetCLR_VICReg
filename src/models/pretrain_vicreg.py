@@ -15,7 +15,7 @@ from torch import nn
 
 from src.models.transformer import Transformer
 from src.models.jet_augs import *
-from src.data.convert_data import convert_x
+from src.features.perf_eval import get_perf_stats, linear_classifier_test
 
 # if torch.cuda.is_available():
 #     import setGPU  # noqa: F401
@@ -59,13 +59,13 @@ class VICReg(nn.Module):
         self.N_y = self.y_backbone.input_dim
         self.embedding = args.Do
         self.return_embedding = args.return_embedding
-        self.return_representation = args.return_representation
+        # self.return_representation = args.return_representation
         self.x_projector = Projector(args.mlp, self.embedding)
         self.y_projector = (
             self.x_projector if args.shared else copy.deepcopy(self.x_projector)
         )
 
-    def forward(self, x):
+    def forward(self, x, return_rep=False):
         """
         x -> x_aug -> (x_xform) -> x_rep -> x_emb
         y -> y_aug -> (y_xform) -> y_rep -> y_emb
@@ -74,9 +74,19 @@ class VICReg(nn.Module):
         _rep: backbone representation
         _emb: projected embedding
         """
-        x_aug, y_aug = self.augmentation(
-            self.args, x, self.args.device
-        )  # [batch_size, n_constit, 3]
+        if return_rep:
+            # Don't do augmentation, just return the backbone representation
+            y = x.clone()
+            x_aug = x.transpose(
+                1, 2
+            )  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
+            y_aug = y_aug.transpose(
+                1, 2
+            )  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
+        else:
+            x_aug, y_aug = self.augmentation(
+                self.args, x, self.args.device
+            )  # [batch_size, n_constit, 3]
         #         print(f"x_aug contains nan: {contains_nan(x_aug)}")
         #         print(f"y_aug contains nan: {contains_nan(y_aug)}")
 
@@ -95,7 +105,7 @@ class VICReg(nn.Module):
         )  # [batch_size, output_dim]
         #         print(f"x_rep contains nan: {contains_nan(x_rep)}")
         #         print(f"y_rep contains nan: {contains_nan(y_rep)}")
-        if self.return_representation:
+        if return_rep:
             return x_rep, y_rep
 
         x_emb = self.x_projector(x_rep)  # [batch_size, embedding_size]
@@ -195,6 +205,19 @@ def load_data(dataset_path, flag, n_files=-1):
     return data
 
 
+def load_labels(dataset_path, flag, n_files=-1):
+    data_files = glob.glob(f"{dataset_path}/{flag}/processed/3_features/*")
+
+    data = []
+    for i, file in enumerate(data_files):
+        data += torch.load(f"{dataset_path}/{flag}/processed/3_features/labels_{i}.pt")
+        print(f"--- loaded label file {i} from `{flag}` directory")
+        if n_files != -1 and i == n_files - 1:
+            break
+
+    return data
+
+
 def main(args):
     # define the global base device
     world_size = torch.cuda.device_count()
@@ -222,6 +245,13 @@ def main(args):
     # prepare data
     data_train = load_data(args.dataset_path, "train", n_files=args.num_train_files)
     data_valid = load_data(args.dataset_path, "val", n_files=args.num_val_files)
+    data_test = load_data(args.dataset_path, "test", n_files=args.num_test_files)
+
+    labels_train = load_labels(args.dataset_path, "train", n_files=args.num_train_files)
+    labels_test = load_labels(args.dataset_path, "test", n_files=args.num_test_files)
+
+    labels_train = torch.tensor([t.item() for t in labels_train])
+    labels_test = torch.tensor([t.item() for t in labels_test])
 
     n_train = len(data_train)
     n_val = len(data_valid)
@@ -284,20 +314,21 @@ def main(args):
         valid_loader = DataLoader(data_valid, batch_size)
         pbar = tqdm.tqdm(valid_loader, total=val_its)
         #     for _, batch in tqdm.tqdm(enumerate(valid_loader)):
-        for _, batch in enumerate(pbar):
-            batch = batch.to(args.device)
-            # batch = convert_x(batch, args.device)  # [batch_size, 3, n_constit]
-            if args.return_all_losses:
-                loss, repr_loss, std_loss, cov_loss = model.forward(batch)
-                repr_loss_val_epoch.append(repr_loss.detach().cpu().item())
-                std_loss_val_epoch.append(std_loss.detach().cpu().item())
-                cov_loss_val_epoch.append(cov_loss.detach().cpu().item())
-                loss = loss.detach().cpu().item()
-            else:
-                loss = model.forward(batch).cpu().item()
-            loss_val_batches.append(loss)
-            loss_val_epoch.append(loss)
-            pbar.set_description(f"Validation loss: {loss:.4f}")
+        with torch.no_grad():
+            for _, batch in enumerate(pbar):
+                batch = batch.to(args.device)
+                # batch = convert_x(batch, args.device)  # [batch_size, 3, n_constit]
+                if args.return_all_losses:
+                    loss, repr_loss, std_loss, cov_loss = model.forward(batch)
+                    repr_loss_val_epoch.append(repr_loss.detach().cpu().item())
+                    std_loss_val_epoch.append(std_loss.detach().cpu().item())
+                    cov_loss_val_epoch.append(cov_loss.detach().cpu().item())
+                    loss = loss.detach().cpu().item()
+                else:
+                    loss = model.forward(batch).cpu().item()
+                loss_val_batches.append(loss)
+                loss_val_epoch.append(loss)
+                pbar.set_description(f"Validation loss: {loss:.4f}")
         #             print(f"Validation loss: {loss:.4f}")
         l_val = np.mean(np.array(loss_val_epoch))
         print(f"Validation loss: {l_val:.4f}")
@@ -325,6 +356,61 @@ def main(args):
             l_val_best = l_val
             torch.save(model.state_dict(), f"{model_loc}/vicreg_{label}_best.pth")
         torch.save(model.state_dict(), f"{model_loc}/vicreg_{label}_last.pth")
+        if m % 10 == 0:
+            # do a short LCT
+            model.eval()
+            with torch.no_grad():
+                train_loader = DataLoader(data_train[:10000], args.batch_size)
+                test_loader = DataLoader(data_test[:10000], args.batch_size)
+                tr_reps = []
+                batch_size = args.batch_size
+                train_its = int(10000 / batch_size)
+                test_its = int(10000 / batch_size)
+                pbar = tqdm.tqdm(train_loader, total=train_its)
+                for i, batch in enumerate(pbar):
+                    batch = batch.to(args.device)
+                    tr_reps.append(
+                        model(batch, return_rep=True)[0].detach().cpu().numpy()
+                    )
+                    pbar.set_description(f"{i}")
+                tr_reps = np.concatenate(tr_reps)
+                te_reps = []
+                pbar = tqdm.tqdm(test_loader, total=test_its)
+                for i, batch in enumerate(pbar):
+                    batch = batch.to(args.device)
+                    te_reps.append(
+                        model(batch, return_rep=True)[0].detach().cpu().numpy()
+                    )
+                    pbar.set_description(f"{i}")
+                te_reps = np.concatenate(te_reps)
+
+            # perform the linear classifier test (LCT) on the representations
+            i = 0
+            linear_input_size = tr_reps.shape[1]
+            linear_n_epochs = 750
+            linear_learning_rate = 0.001
+            linear_batch_size = 1024
+            out_dat_f, out_lbs_f, losses_f = linear_classifier_test(
+                linear_input_size,
+                linear_batch_size,
+                linear_n_epochs,
+                linear_learning_rate,
+                tr_reps,
+                labels_train,
+                te_reps,
+                labels_test,
+            )
+            auc, imtafe = get_perf_stats(out_lbs_f, out_dat_f)
+            ep = 0
+            step_size = 100
+            for lss in losses_f[::step_size]:
+                print(
+                    f"(rep layer {i}) epoch: " + str(ep) + ", loss: " + str(lss),
+                    flush=True,
+                )
+                ep += step_size
+            print(f"(rep layer {i}) auc: " + str(round(auc, 4)), flush=True)
+            print(f"(rep layer {i}) imtafe: " + str(round(imtafe, 1)), flush=True)
     # After training
 
     np.save(
