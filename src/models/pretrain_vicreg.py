@@ -80,7 +80,7 @@ class VICReg(nn.Module):
             x_aug = x.transpose(
                 1, 2
             )  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
-            y_aug = y_aug.transpose(
+            y_aug = y.transpose(
                 1, 2
             )  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
         else:
