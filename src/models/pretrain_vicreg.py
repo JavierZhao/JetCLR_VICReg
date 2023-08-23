@@ -245,10 +245,10 @@ def main(args):
     # prepare data
     data_train = load_data(args.dataset_path, "train", n_files=args.num_train_files)
     data_valid = load_data(args.dataset_path, "val", n_files=args.num_val_files)
-    data_test = load_data(args.dataset_path, "test", n_files=args.num_test_files)
+    data_test = load_data(args.dataset_path, "test", n_files=1)
 
     labels_train = load_labels(args.dataset_path, "train", n_files=args.num_train_files)
-    labels_test = load_labels(args.dataset_path, "test", n_files=args.num_test_files)
+    labels_test = load_labels(args.dataset_path, "test", n_files=1)
 
     labels_train = torch.tensor([t.item() for t in labels_train])
     labels_test = torch.tensor([t.item() for t in labels_test])
@@ -359,6 +359,7 @@ def main(args):
         if m % 10 == 0:
             # do a short LCT
             model.eval()
+            print("Doing LCT")
             with torch.no_grad():
                 train_loader = DataLoader(data_train[:10000], args.batch_size)
                 test_loader = DataLoader(data_test[:10000], args.batch_size)
@@ -659,7 +660,7 @@ if __name__ == "__main__":
         type=bool,
         action="store",
         dest="return_all_losses",
-        default=False,
+        default=True,
         help="return the three terms in the loss function as well",
     )
 
