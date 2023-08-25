@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 import tqdm
 import yaml
 from torch import nn
@@ -65,7 +65,7 @@ class VICReg(nn.Module):
             self.x_projector if args.shared else copy.deepcopy(self.x_projector)
         )
 
-    def forward(self, x, return_rep=False):
+    def forward(self, x, x_labels=None, data=None, labels=None, return_rep=False):
         """
         x -> x_aug -> (x_xform) -> x_rep -> x_emb
         y -> y_aug -> (y_xform) -> y_rep -> y_emb
@@ -77,16 +77,14 @@ class VICReg(nn.Module):
         if return_rep:
             # Don't do augmentation, just return the backbone representation
             y = x.clone()
-            x_aug = x.transpose(
-                1, 2
-            )  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
-            y_aug = y.transpose(
-                1, 2
-            )  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
+            x_aug = x.transpose(1, 2)  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
+            y_aug = y.transpose(1, 2)  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
         else:
             x_aug, y_aug = self.augmentation(
-                self.args, x, self.args.device
+                x, x_labels, data, labels, self.args.device
             )  # [batch_size, n_constit, 3]
+            x_aug = x_aug.transpose(1, 2)  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
+            y_aug = y_aug.transpose(1, 2)  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
         #         print(f"x_aug contains nan: {contains_nan(x_aug)}")
         #         print(f"y_aug contains nan: {contains_nan(y_aug)}")
 
@@ -166,29 +164,38 @@ def get_backbones(args):
     return x_backbone, y_backbone
 
 
-def augmentation(args, x, device):
+def augmentation(batch_x, batch_x_label, data_train, labels_train, device):
     """
-    Applies all the augmentations specified in the args
+    For each jet in the batch, sample another jet of the same class (signal/background)
+    from the training data as the second view y and return x, y.
+
+    batch_x: [batch_size, 3, n_constit]
     """
-    # crop all jets to a fixed number of constituents (default=50)
-    x = crop_jets(x, args.nconstit)
-    x = rotate_jets(x, device)
-    y = x.clone()
-    if args.do_rotation:
-        y = rotate_jets(y, device)
-    if args.do_cf:
-        y = collinear_fill_jets(np.array(y.cpu()), device)
-        y = collinear_fill_jets(np.array(y.cpu()), device)
-    if args.do_ptd:
-        y = distort_jets(y, device, strength=args.ptst, pT_clip_min=args.ptcm)
-    if args.do_translation:
-        y = translate_jets(y, device, width=args.trsw)
-        x = translate_jets(x, device, width=args.trsw)
-    x = rescale_pts(x)  # [batch_size, 3, n_constit]
-    y = rescale_pts(y)  # [batch_size, 3, n_constit]
-    x = x.transpose(1, 2)  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
-    y = y.transpose(1, 2)  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
-    return x, y
+    # List to store the y samples for the entire batch
+    batch_y = []
+
+    # Loop over all jets and labels in the batch
+    for x, x_label in zip(batch_x, batch_x_label):
+        # Indices of all data points with the same label as x_label
+        same_label_indices = torch.where(labels_train == x_label)[0]
+
+        # Randomly select one of the indices while ensuring it's not the same as the current jet
+        x_index = torch.where((data_train == x).all(dim=1).all(dim=1))[0][0]
+        potential_indices = same_label_indices[same_label_indices != x_index]
+        y_index = potential_indices[
+            torch.randint(0, len(potential_indices), (1,))
+        ].item()
+
+        # Get the data point corresponding to the chosen index
+        y = data_train[y_index]
+        batch_y.append(y)
+        assert (
+            labels_train[y_index].item() == x_label
+        ), "Mismatch in labels between x and y."
+        assert not torch.all(torch.eq(x, y)), "sampled the same jet"
+
+    batch_y = torch.stack(batch_y).to(device)
+    return batch_x, batch_y
 
 
 # load the datafiles
@@ -248,17 +255,20 @@ def main(args):
     data_test = load_data(args.dataset_path, "test", n_files=1)
 
     labels_train = load_labels(args.dataset_path, "train", n_files=args.num_train_files)
+    labels_valid = load_labels(args.dataset_path, "val", n_files=args.num_val_files)
     labels_test = load_labels(args.dataset_path, "test", n_files=1)
 
     # only take the first 10k jets for LCT
-    labels_train = labels_train[:10000]
-    labels_test = labels_test[:10000]
+    labels_train_lct = labels_train[:10000]
+    labels_test_lct = labels_test[:10000]
 
     labels_train = torch.tensor([t.item() for t in labels_train])
-    labels_test = torch.tensor([t.item() for t in labels_test])
+    labels_valid = torch.tensor([t.item() for t in labels_valid])
+    labels_train_lct = torch.tensor([t.item() for t in labels_train_lct])
+    labels_test_lct = torch.tensor([t.item() for t in labels_test_lct])
 
-    n_train = len(data_train)
-    n_val = len(data_valid)
+    n_train = data_train.shape[0]
+    n_val = data_valid.shape[0]
 
     args.augmentation = augmentation
 
@@ -291,21 +301,22 @@ def main(args):
         repr_loss_val_epoch, std_loss_val_epoch, cov_loss_val_epoch = [], [], []
         # invariance, variance, covariance loss recorded for each batch in this epoch
 
-        train_loader = DataLoader(data_train, batch_size)
+        dataset = TensorDataset(data_train, labels_train)
+        train_loader = DataLoader(dataset, batch_size)
         model.train()
         pbar_t = tqdm.tqdm(train_loader, total=train_its)
-        for _, batch in enumerate(pbar_t):
-            batch = batch.to(args.device)
-            # batch = convert_x(batch, args.device)
+        for _, (batch_data, batch_labels) in enumerate(pbar_t):
+            batch_data = batch_data.to(device)
+            batch_labels = batch_labels.to(device)
             optimizer.zero_grad()
             if args.return_all_losses:
-                loss, repr_loss, std_loss, cov_loss = model.forward(batch)
+                loss, repr_loss, std_loss, cov_loss = model.forward(batch_data, batch_labels, data_train, labels_train)
                 #             print(loss, repr_loss, std_loss, cov_loss)
                 repr_loss_train_epoch.append(repr_loss.detach().cpu().item())
                 std_loss_train_epoch.append(std_loss.detach().cpu().item())
                 cov_loss_train_epoch.append(cov_loss.detach().cpu().item())
             else:
-                loss = model.forward(batch)
+                loss = model.forward(batch_data, batch_labels, data_train, labels_train)
             loss.backward()
             optimizer.step()
             loss = loss.detach().cpu().item()
@@ -316,21 +327,21 @@ def main(args):
         l_train = np.mean(np.array(loss_train_epoch))
         print(f"Training loss: {l_train:.4f}")
         model.eval()
-        valid_loader = DataLoader(data_valid, batch_size)
+        dataset = TensorDataset(data_valid, labels_valid)
+        valid_loader = DataLoader(dataset, batch_size)
         pbar_v = tqdm.tqdm(valid_loader, total=val_its)
-        #     for _, batch in tqdm.tqdm(enumerate(valid_loader)):
         with torch.no_grad():
-            for _, batch in enumerate(pbar_v):
-                batch = batch.to(args.device)
-                # batch = convert_x(batch, args.device)  # [batch_size, 3, n_constit]
+            for _, (batch_data, batch_labels) in enumerate(pbar_v):
+                batch_data = batch_data.to(device)
+                batch_labels = batch_labels.to(device)
                 if args.return_all_losses:
-                    loss, repr_loss, std_loss, cov_loss = model.forward(batch)
+                    loss, repr_loss, std_loss, cov_loss = model.forward(batch_data, batch_labels, data_valid, labels_valid)
                     repr_loss_val_epoch.append(repr_loss.detach().cpu().item())
                     std_loss_val_epoch.append(std_loss.detach().cpu().item())
                     cov_loss_val_epoch.append(cov_loss.detach().cpu().item())
                     loss = loss.detach().cpu().item()
                 else:
-                    loss = model.forward(batch).cpu().item()
+                    loss = model.forward(batch_data, batch_labels, data_valid, labels_valid).cpu().item()
                 loss_val_batches.append(loss)
                 loss_val_epoch.append(loss)
                 pbar_v.set_description(f"Validation loss: {loss:.4f}")
@@ -402,9 +413,9 @@ def main(args):
                 linear_n_epochs,
                 linear_learning_rate,
                 tr_reps,
-                labels_train,
+                labels_train_lct,
                 te_reps,
-                labels_test,
+                labels_test_lct,
             )
             auc, imtafe = get_perf_stats(out_lbs_f, out_dat_f)
             ep = 0
@@ -594,70 +605,6 @@ if __name__ == "__main__":
         dest="return_representation",
         default=False,
         help="return_representation",
-    )
-    parser.add_argument(
-        "--do-translation",
-        type=bool,
-        action="store",
-        dest="do_translation",
-        default=True,
-        help="do_translation",
-    )
-    parser.add_argument(
-        "--do-rotation",
-        type=bool,
-        action="store",
-        dest="do_rotation",
-        default=True,
-        help="do_rotation",
-    )
-    parser.add_argument(
-        "--do-cf",
-        type=bool,
-        action="store",
-        dest="do_cf",
-        default=True,
-        help="do collinear splitting",
-    )
-    parser.add_argument(
-        "--do-ptd",
-        type=bool,
-        action="store",
-        dest="do_ptd",
-        default=True,
-        help="do soft splitting (distort_jets)",
-    )
-    parser.add_argument(
-        "--nconstit",
-        type=int,
-        action="store",
-        dest="nconstit",
-        default=50,
-        help="number of constituents per jet",
-    )
-    parser.add_argument(
-        "--ptst",
-        type=float,
-        action="store",
-        dest="ptst",
-        default=0.1,
-        help="strength param in distort_jets",
-    )
-    parser.add_argument(
-        "--ptcm",
-        type=float,
-        action="store",
-        dest="ptcm",
-        default=0.1,
-        help="pT_clip_min param in distort_jets",
-    )
-    parser.add_argument(
-        "--trsw",
-        type=float,
-        action="store",
-        dest="trsw",
-        default=1.0,
-        help="width param in translate_jets",
     )
     parser.add_argument(
         "--return-all-losses",
