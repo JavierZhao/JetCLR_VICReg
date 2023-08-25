@@ -57,7 +57,7 @@ class VICReg(nn.Module):
         self.y_backbone = args.y_backbone
         self.N_x = self.x_backbone.input_dim
         self.N_y = self.y_backbone.input_dim
-        self.embedding = args.Do
+        self.embedding = args.feature_dim
         self.return_embedding = args.return_embedding
         # self.return_representation = args.return_representation
         self.x_projector = Projector(args.mlp, self.embedding)
@@ -161,7 +161,7 @@ def off_diagonal(x):
 
 
 def get_backbones(args):
-    x_backbone = Transformer(input_dim=args.x_inputs)
+    x_backbone = Transformer(input_dim=args.x_inputs, output_dim=args.feature_dim)
     y_backbone = x_backbone if args.shared else copy.deepcopy(x_backbone)
     return x_backbone, y_backbone
 
@@ -267,6 +267,7 @@ def main(args):
 
     args.x_backbone, args.y_backbone = get_backbones(args)
     model = VICReg(args).to(args.device)
+    print(model)
 
     train_its = int(n_train / batch_size)
     val_its = int(n_val / batch_size)
@@ -501,13 +502,12 @@ if __name__ == "__main__":
         help="transform_inputs",
     )
     parser.add_argument(
-        "--De", type=int, action="store", dest="De", default=32, help="De"
-    )
-    parser.add_argument(
-        "--Do", type=int, action="store", dest="Do", default=1000, help="Do"
-    )
-    parser.add_argument(
-        "--hidden", type=int, action="store", dest="hidden", default=128, help="hidden"
+        "--feature-dim",
+        type=int,
+        action="store",
+        dest="feature_dim",
+        default=1000,
+        help="dimension of learned feature space",
     )
     parser.add_argument(
         "--shared",
