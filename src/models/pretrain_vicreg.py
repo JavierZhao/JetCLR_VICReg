@@ -180,7 +180,7 @@ def augmentation(batch_x, batch_x_label, data_train, labels_train, device):
         same_label_indices = torch.where(labels_train == x_label)[0]
 
         # Randomly select one of the indices while ensuring it's not the same as the current jet
-        x_index = torch.where((data_train == x).all(dim=1).all(dim=1))[0][0]
+        x_index = torch.where((data_train == x).all(dim=1).all(dim=1))[0][0].to(device)
         potential_indices = same_label_indices[same_label_indices != x_index]
         y_index = potential_indices[
             torch.randint(0, len(potential_indices), (1,))
@@ -262,10 +262,14 @@ def main(args):
     labels_train_lct = labels_train[:10000]
     labels_test_lct = labels_test[:10000]
 
-    labels_train = torch.tensor([t.item() for t in labels_train])
-    labels_valid = torch.tensor([t.item() for t in labels_valid])
-    labels_train_lct = torch.tensor([t.item() for t in labels_train_lct])
-    labels_test_lct = torch.tensor([t.item() for t in labels_test_lct])
+    labels_train = torch.tensor([t.item() for t in labels_train]).to(device)
+    labels_valid = torch.tensor([t.item() for t in labels_valid]).to(device)
+    labels_train_lct = torch.tensor([t.item() for t in labels_train_lct]).to(device)
+    labels_test_lct = torch.tensor([t.item() for t in labels_test_lct]).to(device)
+    
+    data_train = torch.stack(data_train).to(device)
+    data_valid = torch.stack(data_valid).to(device)
+    data_test = torch.stack(data_test).to(device)
 
     n_train = data_train.shape[0]
     n_val = data_valid.shape[0]
