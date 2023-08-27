@@ -421,7 +421,7 @@ def main(args):
                 te_reps,
                 labels_test_lct,
             )
-            auc, imtafe = get_perf_stats(out_lbs_f, out_dat_f)
+            auc, imtafe = get_perf_stats(out_lbs_f.cpu(), out_dat_f.cpu())
             ep = 0
             step_size = 100
             for lss in losses_f[::step_size]:
