@@ -188,11 +188,17 @@ def augmentation(batch_x, batch_x_label, data_train, labels_train, device):
 
         # Get the data point corresponding to the chosen index
         y = data_train[y_index]
-        batch_y.append(y)
+        
         assert (
             labels_train[y_index].item() == x_label
         ), "Mismatch in labels between x and y."
-        assert not torch.all(torch.eq(x, y)), "sampled the same jet"
+        # assert not torch.all(torch.eq(x, y)), "sampled the same jet"
+        while torch.all(torch.eq(x, y)):
+            # pick another jet
+            y_index = potential_indices[torch.randint(0, len(potential_indices), (1,))].item()
+            y = data_train[y_index]
+        batch_y.append(y)
+
 
     batch_y = torch.stack(batch_y).to(device)
     return batch_x, batch_y
