@@ -523,7 +523,7 @@ if __name__ == "__main__":
         "--shared",
         type=bool,
         action="store",
-        default=False,
+        default=True,
         help="share parameters of backbone",
     )
     parser.add_argument(
