@@ -159,7 +159,7 @@ def off_diagonal(x):
 
 
 def get_backbones(args):
-    x_backbone = Transformer(input_dim=args.x_inputs, output_dim=args.feature_dim)
+    x_backbone = Transformer(input_dim=args.x_inputs, output_dim=args.feature_dim, dim_feedforward=args.model_dim, model_dim=args.model_dim)
     y_backbone = x_backbone if args.shared else copy.deepcopy(x_backbone)
     return x_backbone, y_backbone
 
@@ -382,6 +382,45 @@ def main(args):
             l_val_best = l_val
             torch.save(model.state_dict(), f"{model_loc}/vicreg_{label}_best.pth")
         torch.save(model.state_dict(), f"{model_loc}/vicreg_{label}_last.pth")
+        # save the model performance
+        np.save( f"{model_perf_loc}/vicreg_{label}_loss_train_epochs.npy", np.array(loss_train_epochs))
+        np.save(
+            f"{model_perf_loc}/vicreg_{label}_loss_train_batches.npy",
+            np.array(loss_train_batches),
+        )
+        np.save(
+            f"{model_perf_loc}/vicreg_{label}_loss_val_epochs.npy",
+            np.array(loss_val_epochs),
+        )
+        np.save(
+            f"{model_perf_loc}/vicreg_{label}_loss_val_batches.npy",
+            np.array(loss_val_batches),
+        )
+        if args.return_all_losses:
+            np.save(
+                f"{model_perf_loc}/vicreg_{label}_repr_loss_train_epochs.npy",
+                np.array(repr_loss_train_epochs),
+            )
+            np.save(
+                f"{model_perf_loc}/vicreg_{label}_std_loss_train_epochs.npy",
+                np.array(std_loss_train_epochs),
+            )
+            np.save(
+                f"{model_perf_loc}/vicreg_{label}_cov_loss_train_epochs.npy",
+                np.array(cov_loss_train_epochs),
+            )
+            np.save(
+                f"{model_perf_loc}/vicreg_{label}_repr_loss_val_epochs.npy",
+                np.array(repr_loss_val_epochs),
+            )
+            np.save(
+                f"{model_perf_loc}/vicreg_{label}_std_loss_val_epochs.npy",
+                np.array(std_loss_val_epochs),
+            )
+            np.save(
+                f"{model_perf_loc}/vicreg_{label}_cov_loss_val_epochs.npy",
+                np.array(cov_loss_val_epochs),
+            )
         if m % 10 == 0:
             # do a short LCT
             model.eval()
@@ -438,49 +477,9 @@ def main(args):
                 ep += step_size
             print(f"(rep layer {i}) auc: " + str(round(auc, 4)), flush=True)
             print(f"(rep layer {i}) imtafe: " + str(round(imtafe, 1)), flush=True)
-    # After training
+    # Training complete
 
-    np.save(
-        f"{model_perf_loc}/vicreg_{label}_loss_train_epochs.npy",
-        np.array(loss_train_epochs),
-    )
-    np.save(
-        f"{model_perf_loc}/vicreg_{label}_loss_train_batches.npy",
-        np.array(loss_train_batches),
-    )
-    np.save(
-        f"{model_perf_loc}/vicreg_{label}_loss_val_epochs.npy",
-        np.array(loss_val_epochs),
-    )
-    np.save(
-        f"{model_perf_loc}/vicreg_{label}_loss_val_batches.npy",
-        np.array(loss_val_batches),
-    )
-    if args.return_all_losses:
-        np.save(
-            f"{model_perf_loc}/vicreg_{label}_repr_loss_train_epochs.npy",
-            np.array(repr_loss_train_epochs),
-        )
-        np.save(
-            f"{model_perf_loc}/vicreg_{label}_std_loss_train_epochs.npy",
-            np.array(std_loss_train_epochs),
-        )
-        np.save(
-            f"{model_perf_loc}/vicreg_{label}_cov_loss_train_epochs.npy",
-            np.array(cov_loss_train_epochs),
-        )
-        np.save(
-            f"{model_perf_loc}/vicreg_{label}_repr_loss_val_epochs.npy",
-            np.array(repr_loss_val_epochs),
-        )
-        np.save(
-            f"{model_perf_loc}/vicreg_{label}_std_loss_val_epochs.npy",
-            np.array(std_loss_val_epochs),
-        )
-        np.save(
-            f"{model_perf_loc}/vicreg_{label}_cov_loss_val_epochs.npy",
-            np.array(cov_loss_val_epochs),
-        )
+
 
 
 if __name__ == "__main__":
@@ -529,6 +528,14 @@ if __name__ == "__main__":
         dest="feature_dim",
         default=1000,
         help="dimension of learned feature space",
+    )
+    parser.add_argument(
+        "--model-dim",
+        type=int,
+        action="store",
+        dest="model_dim",
+        default=1000,
+        help="dimension of transformer-encoder",
     )
     parser.add_argument(
         "--shared",
