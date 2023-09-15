@@ -273,6 +273,7 @@ def main(args):
     val_its = int(n_val / batch_size)
 
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
+    lct_auc_epochs = [] # LCT AUC recorded for each epoch
     loss_val_epochs = []  # loss recorded for each epoch
     repr_loss_val_epochs, std_loss_val_epochs, cov_loss_val_epochs = [], [], []
     # invariance, variance, covariance loss recorded for each epoch
@@ -282,6 +283,7 @@ def main(args):
     # invariance, variance, covariance loss recorded for each epoch
     loss_train_batches = []  # loss recorded for each batch
     l_val_best = 999999
+    lct_auc_best = 0
     for m in range(n_epochs):
         print(f"Epoch {m}\n")
         loss_train_epoch = []  # loss recorded for each batch in this epoch
@@ -403,62 +405,71 @@ def main(args):
                 f"{model_perf_loc}/vicreg_{label}_cov_loss_val_epochs.npy",
                 np.array(cov_loss_val_epochs),
             )
-        if m % 10 == 0:
-            # do a short LCT
-            model.eval()
-            print("Doing LCT")
-            with torch.no_grad():
-                train_loader = DataLoader(data_train[:10000], args.batch_size)
-                test_loader = DataLoader(data_test[:10000], args.batch_size)
-                tr_reps = []
-                batch_size = args.batch_size
-                # train_its = int(10000 / batch_size)
-                # test_its = int(10000 / batch_size)
-                # pbar = tqdm.tqdm(train_loader, total=train_its)
-                for i, batch in enumerate(train_loader):
-                    batch = batch.to(args.device)
-                    tr_reps.append(
-                        model(batch, return_rep=True)[0].detach().cpu().numpy()
-                    )
-                    # pbar.set_description(f"{i}")
-                tr_reps = np.concatenate(tr_reps)
-                te_reps = []
-                # pbar = tqdm.tqdm(test_loader, total=test_its)
-                for i, batch in enumerate(test_loader):
-                    batch = batch.to(args.device)
-                    te_reps.append(
-                        model(batch, return_rep=True)[0].detach().cpu().numpy()
-                    )
-                    # pbar.set_description(f"{i}")
-                te_reps = np.concatenate(te_reps)
-
-            # perform the linear classifier test (LCT) on the representations
-            i = 0
-            linear_input_size = tr_reps.shape[1]
-            linear_n_epochs = 750
-            linear_learning_rate = 0.001
-            linear_batch_size = 1000
-            out_dat_f, out_lbs_f, losses_f = linear_classifier_test(
-                linear_input_size,
-                linear_batch_size,
-                linear_n_epochs,
-                linear_learning_rate,
-                tr_reps,
-                labels_train,
-                te_reps,
-                labels_test,
-            )
-            auc, imtafe = get_perf_stats(out_lbs_f, out_dat_f)
-            ep = 0
-            step_size = 100
-            for lss in losses_f[::step_size]:
-                print(
-                    f"(rep layer {i}) epoch: " + str(ep) + ", loss: " + str(lss),
-                    flush=True,
+        
+        # do a short LCT
+        model.eval()
+        print("Doing LCT")
+        with torch.no_grad():
+            train_loader = DataLoader(data_train[:10000], args.batch_size)
+            test_loader = DataLoader(data_test[:10000], args.batch_size)
+            tr_reps = []
+            batch_size = args.batch_size
+            # train_its = int(10000 / batch_size)
+            # test_its = int(10000 / batch_size)
+            # pbar = tqdm.tqdm(train_loader, total=train_its)
+            for i, batch in enumerate(train_loader):
+                batch = batch.to(args.device)
+                tr_reps.append(
+                    model(batch, return_rep=True)[0].detach().cpu().numpy()
                 )
-                ep += step_size
-            print(f"(rep layer {i}) auc: " + str(round(auc, 4)), flush=True)
-            print(f"(rep layer {i}) imtafe: " + str(round(imtafe, 1)), flush=True)
+                # pbar.set_description(f"{i}")
+            tr_reps = np.concatenate(tr_reps)
+            te_reps = []
+            # pbar = tqdm.tqdm(test_loader, total=test_its)
+            for i, batch in enumerate(test_loader):
+                batch = batch.to(args.device)
+                te_reps.append(
+                    model(batch, return_rep=True)[0].detach().cpu().numpy()
+                )
+                # pbar.set_description(f"{i}")
+            te_reps = np.concatenate(te_reps)
+
+        # perform the linear classifier test (LCT) on the representations
+        i = 0
+        linear_input_size = tr_reps.shape[1]
+        linear_n_epochs = 1000
+        linear_learning_rate = 0.001
+        linear_batch_size = 1000
+        out_dat_f, out_lbs_f, losses_f = linear_classifier_test(
+            linear_input_size,
+            linear_batch_size,
+            linear_n_epochs,
+            linear_learning_rate,
+            tr_reps,
+            labels_train,
+            te_reps,
+            labels_test,
+        )
+        auc, imtafe = get_perf_stats(out_lbs_f, out_dat_f)
+        ep = 0
+        step_size = 200
+        for lss in losses_f[::step_size]:
+            print(
+                f"(rep layer {i}) epoch: " + str(ep) + ", loss: " + str(lss),
+                flush=True,
+            )
+            ep += step_size
+        print(f"(rep layer {i}) auc: " + str(round(auc, 4)), flush=True)
+        print(f"(rep layer {i}) imtafe: " + str(round(imtafe, 1)), flush=True)
+        lct_auc_epochs.append(auc)
+        np.save(
+        f"{model_perf_loc}/vicreg_{label}_lct_auc_epochs.npy",
+        np.array(lct_auc_epochs),
+        )
+        if auc > lct_auc_best:
+            print("New best LCT model")
+            lct_auc_best = auc
+            torch.save(model.state_dict(), f"{model_loc}/vicreg_{label}_lct_best.pth")
     #  training complete
 
     
