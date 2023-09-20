@@ -267,6 +267,7 @@ def main(args):
 
     args.x_backbone, args.y_backbone = get_backbones(args)
     model = VICReg(args).to(args.device)
+    print(f"Number of trainable parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
     print(model)
 
     train_its = int(n_train / batch_size)
@@ -440,32 +441,19 @@ def main(args):
         linear_n_epochs = 1000
         linear_learning_rate = 0.001
         linear_batch_size = 1000
-        out_dat_f, out_lbs_f, losses_f = linear_classifier_test(
-            linear_input_size,
-            linear_batch_size,
-            linear_n_epochs,
-            linear_learning_rate,
-            tr_reps,
-            labels_train,
-            te_reps,
-            labels_test,
-        )
-        auc, imtafe = get_perf_stats(out_lbs_f, out_dat_f)
-        ep = 0
+        out_dat_f, out_lbs_f, losses_f, val_losses_f = linear_classifier_test( linear_input_size, linear_batch_size, linear_n_epochs, linear_learning_rate, tr_reps, labels_train, te_reps, labels_test )
+        auc, imtafe = get_perf_stats( out_lbs_f, out_dat_f )
+        ep=0
         step_size = 200
-        for lss in losses_f[::step_size]:
-            print(
-                f"(rep layer {i}) epoch: " + str(ep) + ", loss: " + str(lss),
-                flush=True,
-            )
-            ep += step_size
-        print(f"(rep layer {i}) auc: " + str(round(auc, 4)), flush=True)
-        print(f"(rep layer {i}) imtafe: " + str(round(imtafe, 1)), flush=True)
+        for j in range(len(losses_f[::step_size])):
+            lss = losses_f[::step_size][j]
+            val_lss = val_losses_f[::step_size][j]
+            print( f"(rep layer {i}) epoch: " + str( ep ) + ", loss: " + str( lss ) + ", val loss: " + str( val_lss ), flush=True)
+            ep+=step_size
+        print( f"(rep layer {i}) auc: "+str( round(auc, 4) ), flush=True)
+        print( f"(rep layer {i}) imtafe: "+str( round(imtafe, 1) ), flush=True)
         lct_auc_epochs.append(auc)
-        np.save(
-        f"{model_perf_loc}/vicreg_{label}_lct_auc_epochs.npy",
-        np.array(lct_auc_epochs),
-        )
+        np.save(f"{model_perf_loc}/vicreg_{label}_lct_auc_epochs.npy", np.array(lct_auc_epochs))
         if auc > lct_auc_best:
             print("New best LCT model")
             lct_auc_best = auc
