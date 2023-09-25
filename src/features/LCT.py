@@ -119,6 +119,8 @@ def main(args):
 
     # perform the LCT for 10 times
     best_auc = 0
+    auc_lst = []
+    comb_auc_lst = []
     for it in range(10):
         # obtain the representations from the trained VICReg model
         with torch.no_grad():
@@ -140,7 +142,7 @@ def main(args):
                 pbar.set_description(f"{i}")
             te_reps = np.concatenate(te_reps)
 
-        # perform the linear classifier test (LCT) on the representations
+        # perform the linear classifier test (LCT) on the VICReg representations
         i = 0
         linear_input_size = tr_reps.shape[1]
         linear_n_epochs = 1000
@@ -157,12 +159,42 @@ def main(args):
             ep+=step_size
         print(f"(rep layer {i}) auc: " + str(round(auc, 4)), flush=True)
         print(f"(rep layer {i}) imtafe: " + str(round(imtafe, 1)), flush=True)
+        auc_lst.append(auc)
         if auc > best_auc:
             print("new best auc: " + str(round(auc, 4)), flush=True)
             best_auc = auc
             np.save(args.eval_path + f"{args.label}/linear_losses_best.npy", losses_f)
             np.save(args.eval_path + f"{args.label}/test_linear_cl_best.npy", out_dat_f)
             np.save(args.eval_path + f"{args.label}/test_linear_cl_labels_best.npy", out_lbs_f)
+            
+        # LCT with raw features + VICReg features
+        print("---------------------")
+        print("LCT with raw features + VICReg features")
+        tr_reps_raw = data_train.view(data_train.shape[0], -1)
+        te_reps_raw = data_test.view(data_test.shape[0], -1)
+        
+        tr_reps_comb = torch.cat((torch.tensor(tr_reps), tr_reps_raw), dim=1)
+        te_reps_comb = torch.cat((torch.tensor(te_reps), te_reps_raw), dim=1)
+        
+        linear_input_size = tr_reps_comb.shape[1]
+        linear_n_epochs = 1000
+        linear_learning_rate = 0.001
+        linear_batch_size = batch_size
+
+        out_dat_f, out_lbs_f, losses_f, val_losses_f = linear_classifier_test( linear_input_size, linear_batch_size, linear_n_epochs, linear_learning_rate, tr_reps_comb, labels_train, te_reps_comb, labels_test )
+        auc, imtafe = get_perf_stats( out_lbs_f, out_dat_f )
+        ep=0
+        step_size = 50
+        for j in range(len(losses_f[::step_size])):
+            lss = losses_f[::step_size][j]
+            val_lss = val_losses_f[::step_size][j]
+            print( f"(rep layer {i}) epoch: " + str( ep ) + ", loss: " + str( lss ) + ", val loss: " + str( val_lss ), flush=True)
+            ep+=step_size
+        print( f"(rep layer {i}) comb auc: "+str( round(auc, 4) ), flush=True)
+        print( f"(rep layer {i}) comb imtafe: "+str( round(imtafe, 1) ), flush=True)
+        comb_auc_lst.append(auc)
+    print(f"AUC list: {auc_lst}", flush=True)
+    print(f"comb AUC list: {comb_auc_lst}", flush=True)
 
 
 if __name__ == "__main__":
