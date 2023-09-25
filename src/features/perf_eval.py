@@ -74,7 +74,8 @@ def linear_classifier_test(
         scheduler = torch.optim.lr_scheduler.StepLR(
             fcn_linear.optimizer, 100, gamma=0.6, last_epoch=-1, verbose=False
         )
-    
+    best_val_loss = float('inf')  # Initialize to a very high value
+    best_model_state = None  # Placeholder for the best model state
     for epoch in range(linear_n_epochs):
         indices_list = torch.split(
             torch.randperm(reps_tr_in.shape[0]), linear_batch_size
@@ -101,10 +102,17 @@ def linear_classifier_test(
             val_loss = bce_loss(z_val, l_val).to(xdevice)
             val_losses.append(val_loss.detach().cpu().numpy())
 
+            # Save model state if current validation loss is the best
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_model_state = fcn_linear.state_dict()
+
         losses.append(np.mean(np.array(losses_e)))
         if linear_opt == "sgd":
             scheduler.step()
             
+    # Load the best model state
+    fcn_linear.load_state_dict(best_model_state)
     out_dat = (
         fcn_linear(torch.Tensor(reps_te_in).view(-1, linear_input_size).to(xdevice))
         .detach()
