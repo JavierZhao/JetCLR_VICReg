@@ -57,7 +57,7 @@ def load_labels(dataset_path, flag, n_files=-1):
 
 
 def get_backbones(args):
-    x_backbone = Transformer(input_dim=args.x_inputs)
+    x_backbone = Transformer(input_dim=args.x_inputs, output_dim=args.feature_dim, model_dim=args.model_dim, dim_feedforward=args.model_dim)
     y_backbone = x_backbone if args.shared else copy.deepcopy(x_backbone)
     return x_backbone, y_backbone
 
@@ -145,7 +145,7 @@ def main(args):
         linear_input_size = tr_reps.shape[1]
         linear_n_epochs = 1000
         linear_learning_rate = 0.001
-        linear_batch_size = 2048
+        linear_batch_size = batch_size
         out_dat_f, out_lbs_f, losses_f, val_losses_f = linear_classifier_test( linear_input_size, linear_batch_size, linear_n_epochs, linear_learning_rate, tr_reps, labels_train, te_reps, labels_test )
         auc, imtafe = get_perf_stats( out_lbs_f, out_dat_f )
         ep=0
@@ -225,6 +225,14 @@ if __name__ == "__main__":
         dest="model_dim",
         default=32,
         help="dimension of the transformer-encoder",
+    )
+    parser.add_argument(
+        "--transform-inputs",
+        type=int,
+        action="store",
+        dest="transform_inputs",
+        default=32,
+        help="",
     )
     parser.add_argument(
         "--shared",
