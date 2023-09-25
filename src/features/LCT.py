@@ -195,6 +195,8 @@ def main(args):
         comb_auc_lst.append(auc)
     print(f"AUC list: {auc_lst}", flush=True)
     print(f"comb AUC list: {comb_auc_lst}", flush=True)
+    print(f"max AUC: {max(auc_lst)}", flush=True)
+    print(f"max comb AUC: {max(comb_auc_lst)}", flush=True)
 
 
 if __name__ == "__main__":
