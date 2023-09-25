@@ -95,7 +95,7 @@ def main(args):
     # load the desired trained VICReg model
     model = VICReg(args).to(args.device)
     model.load_state_dict(
-        torch.load(f"{args.load_vicreg_path}/vicreg_{args.label}_best.pth")
+        torch.load(f"{args.load_vicreg_path}/vicreg_{args.label}_lct_best.pth")
     )
 
     # load the training and testing dataset
@@ -117,53 +117,52 @@ def main(args):
     train_its = int(n_train / batch_size)
     test_its = int(n_test / batch_size)
 
-    # obtain the representations from the trained VICReg model
-    with torch.no_grad():
-        model.eval()
-        train_loader = DataLoader(data_train, args.batch_size)
-        test_loader = DataLoader(data_test, args.batch_size)
-        tr_reps = []
-        pbar = tqdm.tqdm(train_loader, total=train_its)
-        for i, batch in enumerate(pbar):
-            batch = batch.to(args.device)
-            tr_reps.append(model(batch)[0].detach().cpu().numpy())
-            pbar.set_description(f"{i}")
-        tr_reps = np.concatenate(tr_reps)
-        te_reps = []
-        pbar = tqdm.tqdm(test_loader, total=test_its)
-        for i, batch in enumerate(pbar):
-            batch = batch.to(args.device)
-            te_reps.append(model(batch)[0].detach().cpu().numpy())
-            pbar.set_description(f"{i}")
-        te_reps = np.concatenate(te_reps)
+    # perform the LCT for 10 times
+    best_auc = 0
+    for it in range(10):
+        # obtain the representations from the trained VICReg model
+        with torch.no_grad():
+            model.eval()
+            train_loader = DataLoader(data_train, args.batch_size)
+            test_loader = DataLoader(data_test, args.batch_size)
+            tr_reps = []
+            pbar = tqdm.tqdm(train_loader, total=train_its)
+            for i, batch in enumerate(pbar):
+                batch = batch.to(args.device)
+                tr_reps.append(model(batch, True)[1].detach().cpu().numpy())
+                pbar.set_description(f"{i}")
+            tr_reps = np.concatenate(tr_reps)
+            te_reps = []
+            pbar = tqdm.tqdm(test_loader, total=test_its)
+            for i, batch in enumerate(pbar):
+                batch = batch.to(args.device)
+                te_reps.append(model(batch, True)[1].detach().cpu().numpy())
+                pbar.set_description(f"{i}")
+            te_reps = np.concatenate(te_reps)
 
-    # perform the linear classifier test (LCT) on the representations
-    i = 0
-    linear_input_size = tr_reps.shape[1]
-    linear_n_epochs = 750
-    linear_learning_rate = 0.001
-    linear_batch_size = 1024
-    out_dat_f, out_lbs_f, losses_f = linear_classifier_test(
-        linear_input_size,
-        linear_batch_size,
-        linear_n_epochs,
-        linear_learning_rate,
-        tr_reps,
-        labels_train,
-        te_reps,
-        labels_test,
-    )
-    auc, imtafe = get_perf_stats(out_lbs_f, out_dat_f)
-    ep = 0
-    step_size = 25
-    for lss in losses_f[::step_size]:
-        print(f"(rep layer {i}) epoch: " + str(ep) + ", loss: " + str(lss), flush=True)
-        ep += step_size
-    print(f"(rep layer {i}) auc: " + str(round(auc, 4)), flush=True)
-    print(f"(rep layer {i}) imtafe: " + str(round(imtafe, 1)), flush=True)
-    np.save(args.eval_path + f"{args.label}/linear_losses_{i}.npy", losses_f)
-    np.save(args.eval_path + f"{args.label}/test_linear_cl_{i}.npy", out_dat_f)
-    np.save(args.eval_path + f"{args.label}/test_linear_cl_labels_{i}.npy", out_lbs_f)
+        # perform the linear classifier test (LCT) on the representations
+        i = 0
+        linear_input_size = tr_reps.shape[1]
+        linear_n_epochs = 1000
+        linear_learning_rate = 0.001
+        linear_batch_size = 2048
+        out_dat_f, out_lbs_f, losses_f, val_losses_f = linear_classifier_test( linear_input_size, linear_batch_size, linear_n_epochs, linear_learning_rate, tr_reps, labels_train, te_reps, labels_test )
+        auc, imtafe = get_perf_stats( out_lbs_f, out_dat_f )
+        ep=0
+        step_size = 50
+        for j in range(len(losses_f[::step_size])):
+            lss = losses_f[::step_size][j]
+            val_lss = val_losses_f[::step_size][j]
+            print( f"(rep layer {i}) epoch: " + str( ep ) + ", loss: " + str( lss ) + ", val loss: " + str( val_lss ), flush=True)
+            ep+=step_size
+        print(f"(rep layer {i}) auc: " + str(round(auc, 4)), flush=True)
+        print(f"(rep layer {i}) imtafe: " + str(round(imtafe, 1)), flush=True)
+        if auc > best_auc:
+            print("new best auc: " + str(round(auc, 4)), flush=True)
+            best_auc = auc
+            np.save(args.eval_path + f"{args.label}/linear_losses_best.npy", losses_f)
+            np.save(args.eval_path + f"{args.label}/test_linear_cl_best.npy", out_dat_f)
+            np.save(args.eval_path + f"{args.label}/test_linear_cl_labels_best.npy", out_lbs_f)
 
 
 if __name__ == "__main__":
@@ -194,13 +193,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-train-files",
         type=int,
-        default=12,
+        default=1,
         help="Number of files to use for training",
     )
     parser.add_argument(
         "--num-test-files",
         type=int,
-        default=4,
+        default=1,
         help="Number of files to use for testing",
     )
     parser.add_argument(
@@ -212,27 +211,26 @@ if __name__ == "__main__":
         help="Output directory",
     )
     parser.add_argument(
-        "--transform-inputs",
+        "--feature-dim",
         type=int,
         action="store",
-        dest="transform_inputs",
+        dest="feature_dim",
         default=32,
-        help="transform_inputs",
+        help="dimension of learned feature space",
     )
     parser.add_argument(
-        "--De", type=int, action="store", dest="De", default=32, help="De"
-    )
-    parser.add_argument(
-        "--Do", type=int, action="store", dest="Do", default=1000, help="Do"
-    )
-    parser.add_argument(
-        "--hidden", type=int, action="store", dest="hidden", default=128, help="hidden"
+        "--model-dim",
+        type=int,
+        action="store",
+        dest="model_dim",
+        default=32,
+        help="dimension of the transformer-encoder",
     )
     parser.add_argument(
         "--shared",
         type=bool,
         action="store",
-        default=False,
+        default=True,
         help="share parameters of backbone",
     )
     parser.add_argument(
@@ -265,77 +263,13 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=1024,
+        default=2048,
         help="batch_size",
     )
     parser.add_argument(
         "--mlp",
         default="256-256-256",
         help="Size and number of layers of the MLP expander head",
-    )
-    parser.add_argument(
-        "--do-translation",
-        type=bool,
-        action="store",
-        dest="do_translation",
-        default=True,
-        help="do_translation",
-    )
-    parser.add_argument(
-        "--do-rotation",
-        type=bool,
-        action="store",
-        dest="do_rotation",
-        default=True,
-        help="do_rotation",
-    )
-    parser.add_argument(
-        "--do-cf",
-        type=bool,
-        action="store",
-        dest="do_cf",
-        default=True,
-        help="do collinear splitting",
-    )
-    parser.add_argument(
-        "--do-ptd",
-        type=bool,
-        action="store",
-        dest="do_ptd",
-        default=True,
-        help="do soft splitting (distort_jets)",
-    )
-    parser.add_argument(
-        "--nconstit",
-        type=int,
-        action="store",
-        dest="nconstit",
-        default=50,
-        help="number of constituents per jet",
-    )
-    parser.add_argument(
-        "--ptst",
-        type=float,
-        action="store",
-        dest="ptst",
-        default=0.1,
-        help="strength param in distort_jets",
-    )
-    parser.add_argument(
-        "--ptcm",
-        type=float,
-        action="store",
-        dest="ptcm",
-        default=0.1,
-        help="pT_clip_min param in distort_jets",
-    )
-    parser.add_argument(
-        "--trsw",
-        type=float,
-        action="store",
-        dest="trsw",
-        default=1.0,
-        help="width param in translate_jets",
     )
 
     args = parser.parse_args()
