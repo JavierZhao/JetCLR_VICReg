@@ -94,9 +94,14 @@ def main(args):
     args.return_embedding = False
     # load the desired trained VICReg model
     model = VICReg(args).to(args.device)
-    model.load_state_dict(
-        torch.load(f"{args.load_vicreg_path}/vicreg_{args.label}_lct_best.pth")
-    )
+    if args.lct_best:
+        model.load_state_dict(
+            torch.load(f"{args.load_vicreg_path}/vicreg_{args.label}_lct_best.pth")
+        )
+    else:
+        model.load_state_dict(
+            torch.load(f"{args.load_vicreg_path}/vicreg_{args.label}_best.pth")
+        )
 
     # load the training and testing dataset
     data_train = load_data(args.dataset_path, "train", n_files=args.num_train_files)
@@ -274,6 +279,13 @@ if __name__ == "__main__":
         action="store",
         default=True,
         help="share parameters of backbone",
+    )
+    parser.add_argument(
+        "--lct-best",
+        type=bool,
+        action="store",
+        default=True,
+        help="use the model with best lct, otherwise use the one with lowest val loss",
     )
     parser.add_argument(
         "--mask",
