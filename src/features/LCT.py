@@ -127,6 +127,7 @@ def main(args):
     auc_lst = []
     comb_auc_lst = []
     for it in range(10):
+        print(it)
         # obtain the representations from the trained VICReg model
         with torch.no_grad():
             model.eval()
@@ -173,7 +174,7 @@ def main(args):
             np.save(args.eval_path + f"{args.label}/test_linear_cl_labels_best.npy", out_lbs_f)
             
         # LCT with raw features + VICReg features
-        print("---------------------")
+        
         print("LCT with raw features + VICReg features")
         tr_reps_raw = data_train.view(data_train.shape[0], -1)
         te_reps_raw = data_test.view(data_test.shape[0], -1)
@@ -198,6 +199,7 @@ def main(args):
         print( f"(rep layer {i}) comb auc: "+str( round(auc, 4) ), flush=True)
         print( f"(rep layer {i}) comb imtafe: "+str( round(imtafe, 1) ), flush=True)
         comb_auc_lst.append(auc)
+        print("---------------------")
     print(f"AUC list: {auc_lst}", flush=True)
     print(f"comb AUC list: {comb_auc_lst}", flush=True)
     print(f"max AUC: {max(auc_lst)}", flush=True)
