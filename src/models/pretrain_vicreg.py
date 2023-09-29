@@ -273,7 +273,8 @@ def main(args):
     train_its = int(n_train / batch_size)
     val_its = int(n_val / batch_size)
 
-    optimizer = optim.Adam(model.parameters(), lr=0.0001)
+    # optimizer = optim.Adam(model.parameters(), lr=0.0001)
+    optimizer = optim.Adam(model.parameters(), lr=0.0001 * batch_size / 512)
     lct_auc_epochs = [] # LCT AUC recorded for each epoch
     loss_val_epochs = []  # loss recorded for each epoch
     repr_loss_val_epochs, std_loss_val_epochs, cov_loss_val_epochs = [], [], []
