@@ -97,11 +97,14 @@ def main(args):
     if args.lct_best:
         model.load_state_dict(
             torch.load(f"{args.load_vicreg_path}/vicreg_{args.label}_lct_best.pth")
+            print(f"loaded {args.load_vicreg_path}/vicreg_{args.label}_lct_best.pth")
         )
     else:
         model.load_state_dict(
             torch.load(f"{args.load_vicreg_path}/vicreg_{args.label}_best.pth")
+            print(f"loaded {args.load_vicreg_path}/vicreg_{args.label}_best.pth")
         )
+    
 
     # load the training and testing dataset
     data_train = load_data(args.dataset_path, "train", n_files=args.num_train_files)
@@ -286,7 +289,7 @@ if __name__ == "__main__":
         "--lct-best",
         type=bool,
         action="store",
-        default=True,
+        default=False,
         help="use the model with best lct, otherwise use the one with lowest val loss",
     )
     parser.add_argument(
