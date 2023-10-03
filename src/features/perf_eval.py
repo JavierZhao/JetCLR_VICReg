@@ -50,8 +50,20 @@ def linear_classifier_test(
     telab_in,
     val_fraction=0.1,      # Fraction of training data to use as validation
     linear_opt="adam",
+    n_hidden=0,
+    hidden_size=0
 ):
-    xdevice = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # define the global base device
+    world_size = torch.cuda.device_count()
+    if world_size:
+        device = torch.device("cuda:0")
+        for i in range(world_size):
+            print(f"Device {i}: {torch.cuda.get_device_name(i)}")
+    else:
+        device = "cpu"
+        print("Device: CPU")
+    xdevice = device
+#     xdevice = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # Splitting training data into training and validation sets
     num_val_samples = int(val_fraction * reps_tr_in.shape[0])
@@ -61,9 +73,12 @@ def linear_classifier_test(
     reps_tr_in = reps_tr_in[shuffled_indices[num_val_samples:]]
     trlab_in = trlab_in[shuffled_indices[num_val_samples:]]
 
-    fcn_linear = fully_connected_linear_network(
-        linear_input_size, 1, linear_opt, linear_learning_rate
-    )
+    if n_hidden == 0:
+        fcn_linear = fully_connected_linear_network(
+            linear_input_size, 1, linear_opt, linear_learning_rate
+        )
+    else: 
+        fcn_linear = fully_connected_network(linear_input_size, 1, hidden_size, n_hidden, 0.1, linear_opt, linear_learning_rate)
     fcn_linear.to(xdevice)
     bce_loss = nn.BCELoss()
     sigmoid = nn.Sigmoid()
@@ -74,6 +89,8 @@ def linear_classifier_test(
         scheduler = torch.optim.lr_scheduler.StepLR(
             fcn_linear.optimizer, 100, gamma=0.6, last_epoch=-1, verbose=False
         )
+#     elif linear_opt == "adam":
+#         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(fcn_linear.optimizer, 'min', patience=10)
     best_val_loss = float('inf')  # Initialize to a very high value
     best_model_state = None  # Placeholder for the best model state
     for epoch in range(linear_n_epochs):
@@ -109,7 +126,8 @@ def linear_classifier_test(
 
         losses.append(np.mean(np.array(losses_e)))
         if linear_opt == "sgd":
-            scheduler.step()
+            scheduler.step(val_losses[-1])
+
             
     # Load the best model state
     fcn_linear.load_state_dict(best_model_state)
@@ -121,3 +139,4 @@ def linear_classifier_test(
     )
     out_lbs = telab_in
     return out_dat, out_lbs, losses, val_losses    # Return the validation losses as well
+

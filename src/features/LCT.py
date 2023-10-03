@@ -157,7 +157,9 @@ def main(args):
         linear_n_epochs = 1000
         linear_learning_rate = 0.001
         linear_batch_size = batch_size
-        out_dat_f, out_lbs_f, losses_f, val_losses_f = linear_classifier_test( linear_input_size, linear_batch_size, linear_n_epochs, linear_learning_rate, tr_reps, labels_train, te_reps, labels_test )
+        out_dat_f, out_lbs_f, losses_f, val_losses_f = linear_classifier_test(
+             linear_input_size, linear_batch_size, linear_n_epochs, linear_learning_rate, tr_reps, labels_train, te_reps, labels_test,
+               n_hidden=args.n_hidden, hidden_size=args.hidden_size)
         auc, imtafe = get_perf_stats( out_lbs_f, out_dat_f )
         ep=0
         step_size = 50
@@ -271,6 +273,22 @@ if __name__ == "__main__":
         help="dimension of the transformer-encoder",
     )
     parser.add_argument(
+        "--n-hidden",
+        type=int,
+        action="store",
+        dest="n_hidden",
+        default=0,
+        help="number of hidden layers",
+    )
+    parser.add_argument(
+        "--hidden-size",
+        type=int,
+        action="store",
+        dest="hidden_size",
+        default=0,
+        help="number of hidden layers",
+    )
+    parser.add_argument(
         "--transform-inputs",
         type=int,
         action="store",
@@ -291,20 +309,6 @@ if __name__ == "__main__":
         action="store",
         default=False,
         help="use the model with best lct, otherwise use the one with lowest val loss",
-    )
-    parser.add_argument(
-        "--mask",
-        type=bool,
-        action="store",
-        default=False,
-        help="use mask in transformer",
-    )
-    parser.add_argument(
-        "--cmask",
-        type=bool,
-        action="store",
-        default=True,
-        help="use continuous mask in transformer",
     )
     parser.add_argument(
         "--epoch", type=int, action="store", dest="epoch", default=200, help="Epochs"
