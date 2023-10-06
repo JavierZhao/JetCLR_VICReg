@@ -38,7 +38,7 @@ def get_perf_stats(labels, measures):
         imtafe = 1
     return auc, imtafe
 
-
+# ( self, input_size, output_size, hidden_size, n_hidden, dropout_rate, opt, learning_rate ):
 def linear_classifier_test(
     linear_input_size,
     linear_batch_size,
@@ -93,7 +93,25 @@ def linear_classifier_test(
 #         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(fcn_linear.optimizer, 'min', patience=10)
     best_val_loss = float('inf')  # Initialize to a very high value
     best_model_state = None  # Placeholder for the best model state
-    for epoch in range(linear_n_epochs):
+    redo_lct = False
+    epoch = 0
+    while epoch < linear_n_epochs:
+        if redo_lct:
+            # re-initialize the linear classifier
+            print("re-initialized LCT")
+            losses, val_losses = [], []
+            best_val_loss = float('inf')
+            best_model_state = None
+            if n_hidden == 0:
+                fcn_linear = fully_connected_linear_network(
+                    linear_input_size, 1, linear_opt, linear_learning_rate
+                )
+            else: 
+                fcn_linear = fully_connected_network(linear_input_size, 1, hidden_size, n_hidden, 0.1, linear_opt, linear_learning_rate)
+            fcn_linear.to(xdevice)
+            redo_lct = False
+            epoch = 0
+            
         indices_list = torch.split(
             torch.randperm(reps_tr_in.shape[0]), linear_batch_size
         )
@@ -127,7 +145,13 @@ def linear_classifier_test(
         losses.append(np.mean(np.array(losses_e)))
         if linear_opt == "sgd":
             scheduler.step(val_losses[-1])
-
+        
+        if epoch == 50:
+            print(losses[epoch])
+            if losses[epoch] >= 40:
+                # redo LCT
+                redo_lct = True
+        epoch += 1
             
     # Load the best model state
     fcn_linear.load_state_dict(best_model_state)
@@ -139,4 +163,5 @@ def linear_classifier_test(
     )
     out_lbs = telab_in
     return out_dat, out_lbs, losses, val_losses    # Return the validation losses as well
+
 
