@@ -148,7 +148,7 @@ def linear_classifier_test(
         
         if epoch == 50:
             print(losses[epoch])
-            if losses[epoch] >= 40:
+            if losses[epoch] >= 10:
                 # redo LCT
                 redo_lct = True
         epoch += 1
