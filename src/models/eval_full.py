@@ -250,7 +250,7 @@ def plot_losses(args):
 
 def lct(args, data_train, data_test, labels_train, labels_test, batch_size, train_its, test_its):
     args.x_backbone, args.y_backbone = get_backbones(args)
-    args.augmentation = augmentation_lct
+    
 
     args.return_representation = True
     args.return_embedding = False
@@ -420,6 +420,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
     plt.title(f"top Mean Pearson Coefficient: {mean_value:.2f}")
     plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/top_pearson_matrix.png")
     # plt.show()
+    plt.close()
 
     # plot the distribution of Pearson coefficients
     pearson_coeffs = corr_matrix[corr_matrix != 0]  
@@ -432,6 +433,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
     plt.legend()
     plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/top_pearson_distribution.png")
     # plt.show()
+    plt.close()
 
     # Plot the pair plots
     num_feats = data.shape[1]
@@ -457,7 +459,8 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
     fig.suptitle('Top Pair Plots')
     plt.subplots_adjust(wspace=0.4, hspace=0.4)  # Increase spacing between subplots
     plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/top_pair_plots.png")
-    plt.show()
+#     plt.show()
+    plt.close()
 
     # QCD
     # obtain the representations from the trained VICReg model
@@ -507,6 +510,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
     plt.subplots_adjust(wspace=0.4, hspace=0.4)  # Increase spacing between subplots
     plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/QCD_pair_plots.png")
     # plt.show()
+    plt.close()
 
     # Pearson matrix for QCD
     np.random.seed(0)
@@ -532,6 +536,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
     plt.title(f"QCD Mean Pearson Coefficient: {mean_value:.2f}")
     plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/QCD_pearson_matrix.png")
     # plt.show()
+    plt.close()
 
     # Plot the distribution of Pearson coefficients
     pearson_coeffs = corr_matrix[corr_matrix != 0]  
@@ -544,6 +549,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
     plt.legend()
     plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/QCD_pearson_distribution.png")
     # plt.show()
+    plt.close()
 
     # Top and QCD on the same canvas
     data_qcd = te_reps_QCD
@@ -583,7 +589,8 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
     fig.suptitle('top and QCD', y=1.02)
     plt.tight_layout(pad=2.0)  # Adjust padding for better appearance
     plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/top_and_QCD.png")
-    plt.show()
+#     plt.show()
+    plt.close()
 
 
 
@@ -652,7 +659,8 @@ def main(args):
         device = "cpu"
         print("Device: CPU")
     args.device = device
-
+    args.augmentation = augmentation_lct
+    
      # load the training and testing dataset
     data_train = load_data(args.dataset_path, "train", n_files=args.num_train_files)
     data_test = load_data(args.dataset_path, "test", n_files=args.num_test_files)
@@ -673,18 +681,22 @@ def main(args):
     test_its = int(n_test / batch_size)
    
     # plot losses
+    print("-------------------")
+    print("Plotting losses")
     plot_losses(args)
-
-    # LCT
-    lct(args, data_train, data_test, labels_train, labels_test, batch_size, train_its, test_its)
-
+    print("-------------------")
     # plot pair plots
+    print("Making pair plots")
     plot_pair_plots(args, data_train, data_test, labels_train, labels_test, batch_size, train_its, test_its)
-
+    print("-------------------")
     # plot t-SNE
+    print("Making t-SNE plots")
     plot_tsne(args, data_train, data_test, labels_train, labels_test, batch_size, train_its, test_its)
-
-
+    print("-------------------")
+    # LCT
+    print("Doing LCT")
+    lct(args, data_train, data_test, labels_train, labels_test, batch_size, train_its, test_its)
+    print("-------------------")
 
 if __name__ == "__main__":
     """This is executed when run from the command line"""
@@ -775,7 +787,7 @@ if __name__ == "__main__":
         "--y-inputs",
         type=int,
         action="store",
-        dest="x_inputs",
+        dest="y_inputs",
         default=3,
         help="number of features/particle for view x",
     )
@@ -824,6 +836,20 @@ if __name__ == "__main__":
         "--mlp",
         default="256-256-256",
         help="Size and number of layers of the MLP expander head",
+    )
+    parser.add_argument(
+        "--mask",
+        type=bool,
+        action="store",
+        default=False,
+        help="use mask in transformer",
+    )
+    parser.add_argument(
+        "--cmask",
+        type=bool,
+        action="store",
+        default=True,
+        help="use continuous mask in transformer",
     )
 
     args = parser.parse_args()
