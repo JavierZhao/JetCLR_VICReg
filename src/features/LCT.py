@@ -94,6 +94,8 @@ def main(args):
     args.return_embedding = False
     # load the desired trained VICReg model
     model = VICReg(args).to(args.device)
+    args.lct_best = False
+    print(args.lct_best)
     if args.lct_best:
         model.load_state_dict(
             torch.load(f"{args.load_vicreg_path}/vicreg_{args.label}_lct_best.pth")
@@ -192,7 +194,7 @@ def main(args):
         linear_learning_rate = 0.001
         linear_batch_size = batch_size
 
-        out_dat_f, out_lbs_f, losses_f, val_losses_f = linear_classifier_test( linear_input_size, linear_batch_size, linear_n_epochs, linear_learning_rate, tr_reps_comb, labels_train, te_reps_comb, labels_test )
+        out_dat_f, out_lbs_f, losses_f, val_losses_f = linear_classifier_test( linear_input_size, linear_batch_size, linear_n_epochs, linear_learning_rate, tr_reps_comb, labels_train, te_reps_comb, labels_test,n_hidden=args.n_hidden, hidden_size=args.hidden_size )
         auc, imtafe = get_perf_stats( out_lbs_f, out_dat_f )
         ep=0
         step_size = 50
@@ -307,6 +309,7 @@ if __name__ == "__main__":
         "--lct-best",
         type=bool,
         action="store",
+        dest="lct_best",
         default=False,
         help="use the model with best lct, otherwise use the one with lowest val loss",
     )
@@ -333,6 +336,20 @@ if __name__ == "__main__":
         "--mlp",
         default="256-256-256",
         help="Size and number of layers of the MLP expander head",
+    )
+    parser.add_argument(
+        "--mask",
+        type=bool,
+        action="store",
+        default=False,
+        help="use mask in transformer",
+    )
+    parser.add_argument(
+        "--cmask",
+        type=bool,
+        action="store",
+        default=True,
+        help="use continuous mask in transformer",
     )
 
     args = parser.parse_args()
