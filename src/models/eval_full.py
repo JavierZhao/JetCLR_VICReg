@@ -122,7 +122,7 @@ def plot_losses(args):
 
     # Plot loss curves in training
     fontsize = 20
-    fig, ax = plt.subplots(2, 2)
+    fig, ax = plt.subplots(2, 2, figsize=(15, 10))
 
     ax[0, 0].plot(loss_train_epochs, 'r') #row=0, col=0
     ax[0, 0].set_xlabel("Epochs", fontsize=fontsize)
@@ -165,12 +165,14 @@ def plot_losses(args):
     )
     plt.subplots_adjust(hspace=0.5, wspace=0.5) # adjust spacing between plots
     plt.figtext(0.5, 0.01, "Different loss terms in training", ha="center", fontsize=20)
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_loss_train_epochs.png")
+    plt.tight_layout()
+    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_loss_train_epochs.png", dpi=300)
+    plt.close()
     # plt.show()
 
     # Plot loss curves in validation
     fontsize = 20
-    fig, ax = plt.subplots(2, 2)
+    fig, ax = plt.subplots(2, 2, figsize=(15, 10))
 
     ax[0, 0].plot(loss_val_epochs, 'r') #row=0, col=0
     ax[0, 0].set_xlabel("Epochs", fontsize=fontsize)
@@ -213,11 +215,13 @@ def plot_losses(args):
     )
     plt.subplots_adjust(hspace=0.5, wspace=0.5) # adjust spacing between plots
     plt.figtext(0.5, 0.01, "Different loss terms in validation", ha="center", fontsize=20)
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_loss_val_epochs.png")
+    plt.tight_layout()
+    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_loss_val_epochs.png", dpi=300)
+    plt.close()
 
     # Total loss in training and validation across batches
     fontsize = 20
-    fig, ax = plt.subplots(1, 2)
+    fig, ax = plt.subplots(1, 2, figsize=(15, 10))
 
     ax[0].plot(loss_train_batches, 'r') #row=0, col=0
     ax[0].set_xlabel("Batches", fontsize=fontsize)
@@ -240,13 +244,17 @@ def plot_losses(args):
     )
     plt.subplots_adjust(hspace=0.5, wspace=0.5) # adjust spacing between plots
     plt.figtext(0.5, 0.01, "Total loss in training and validation across batches", ha="center", fontsize=20)
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_loss_batches.png")
+    plt.tight_layout()
+    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_loss_batches.png", dpi=300)
+    plt.close()
     # plt.show()
 
     # Plot LCT AUC vs epochs
     plt.plot(lct_auc_epochs)
     plt.title(f"LCT AUC vs epochs, max: {np.max(lct_auc_epochs):.4f}")
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_lct_auc_epochs.png")
+    plt.tight_layout()
+    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_lct_auc_epochs.png", dpi=300)
+    plt.close()
 
 def lct(args, data_train, data_test, labels_train, labels_test, batch_size, train_its, test_its):
     args.x_backbone, args.y_backbone = get_backbones(args)
@@ -577,6 +585,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
 
         ax.set_yticklabels([])
         ax.set_xticklabels([])
+        ax.set_title(f"Feature {i}")
         ax.legend()
         
         sns.despine(ax=ax)
