@@ -37,11 +37,13 @@ from src.models.pretrain_vicreg import VICReg
 from src.models.jet_augs import *
 
 project_dir = Path(__file__).resolve().parents[2]
-print(f"project_dir: {project_dir}")
+print(f"project_dir: {project_dir}") # /ssl-jet-vol-v2/JetCLR_VICReg
 
 # load the data files and the label files from the specified directory
 def load_data(dataset_path, flag, n_files=-1):
-    data_files = glob.glob(f"{dataset_path}/{flag}/processed/3_features/*")
+    data_dir = f"{dataset_path}/{flag}/processed/3_features"
+    data_files = glob.glob(f"{data_dir}/*")
+        
 
     data = []
     for i, file in enumerate(data_files):
@@ -54,7 +56,8 @@ def load_data(dataset_path, flag, n_files=-1):
 
 
 def load_labels(dataset_path, flag, n_files=-1):
-    data_files = glob.glob(f"{dataset_path}/{flag}/processed/3_features/*")
+    data_dir = f"{dataset_path}/{flag}/processed/3_features"
+    data_files = glob.glob(f"{data_dir}/*")
 
     data = []
     for i, file in enumerate(data_files):
@@ -108,17 +111,17 @@ def augmentation(args, x, device):
 def plot_losses(args):
     label = args.label
     model_label = "vicreg_" + label
-    cov_loss_train_epochs = np.load(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_cov_loss_train_epochs.npy")
-    cov_loss_val_epochs = np.load(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_cov_loss_val_epochs.npy")
-    loss_train_batches = np.load(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_loss_train_batches.npy")
-    loss_train_epochs = np.load(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_loss_train_epochs.npy")
-    loss_val_batches = np.load(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_loss_val_batches.npy")
-    loss_val_epochs = np.load(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_loss_val_epochs.npy")
-    repr_loss_train_epochs = np.load(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_repr_loss_train_epochs.npy")
-    repr_loss_val_epochs = np.load(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_repr_loss_val_epochs.npy")
-    std_loss_train_epochs = np.load(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_std_loss_train_epochs.npy")
-    std_loss_val_epochs = np.load(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_std_loss_val_epochs.npy")
-    lct_auc_epochs = np.load(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/{model_label}_lct_auc_epochs.npy")
+    cov_loss_train_epochs = np.load(f"{project_dir}/models/model_performances/{label}/{model_label}_cov_loss_train_epochs.npy")
+    cov_loss_val_epochs = np.load(f"{project_dir}/models/model_performances/{label}/{model_label}_cov_loss_val_epochs.npy")
+    loss_train_batches = np.load(f"{project_dir}/models/model_performances/{label}/{model_label}_loss_train_batches.npy")
+    loss_train_epochs = np.load(f"{project_dir}/models/model_performances/{label}/{model_label}_loss_train_epochs.npy")
+    loss_val_batches = np.load(f"{project_dir}/models/model_performances/{label}/{model_label}_loss_val_batches.npy")
+    loss_val_epochs = np.load(f"{project_dir}/models/model_performances/{label}/{model_label}_loss_val_epochs.npy")
+    repr_loss_train_epochs = np.load(f"{project_dir}/models/model_performances/{label}/{model_label}_repr_loss_train_epochs.npy")
+    repr_loss_val_epochs = np.load(f"{project_dir}/models/model_performances/{label}/{model_label}_repr_loss_val_epochs.npy")
+    std_loss_train_epochs = np.load(f"{project_dir}/models/model_performances/{label}/{model_label}_std_loss_train_epochs.npy")
+    std_loss_val_epochs = np.load(f"{project_dir}/models/model_performances/{label}/{model_label}_std_loss_val_epochs.npy")
+    lct_auc_epochs = np.load(f"{project_dir}/models/model_performances/{label}/{model_label}_lct_auc_epochs.npy")
 
     # Plot loss curves in training
     fontsize = 20
@@ -166,7 +169,7 @@ def plot_losses(args):
     plt.subplots_adjust(hspace=0.5, wspace=0.5) # adjust spacing between plots
     plt.figtext(0.5, 0.01, "Different loss terms in training", ha="center", fontsize=20)
     plt.tight_layout()
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/loss_train_epochs.png", dpi=300)
+    plt.savefig(f"{project_dir}/models/model_performances/{label}/loss_train_epochs.png", dpi=300)
     plt.close()
     # plt.show()
 
@@ -216,7 +219,7 @@ def plot_losses(args):
     plt.subplots_adjust(hspace=0.5, wspace=0.5) # adjust spacing between plots
     plt.figtext(0.5, 0.01, "Different loss terms in validation", ha="center", fontsize=20)
     plt.tight_layout()
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/loss_val_epochs.png", dpi=300)
+    plt.savefig(f"{project_dir}/models/model_performances/{label}/loss_val_epochs.png", dpi=300)
     plt.close()
 
     # Total loss in training and validation across batches
@@ -245,7 +248,7 @@ def plot_losses(args):
     plt.subplots_adjust(hspace=0.5, wspace=0.5) # adjust spacing between plots
     plt.figtext(0.5, 0.01, "Total loss in training and validation across batches", ha="center", fontsize=20)
     plt.tight_layout()
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/loss_batches.png", dpi=300)
+    plt.savefig(f"{project_dir}/models/model_performances/{label}/loss_batches.png", dpi=300)
     plt.close()
     # plt.show()
 
@@ -253,7 +256,7 @@ def plot_losses(args):
     plt.plot(lct_auc_epochs)
     plt.title(f"LCT AUC vs epochs, max: {np.max(lct_auc_epochs):.4f}")
     plt.tight_layout()
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{label}/lct_auc_epochs.png", dpi=300)
+    plt.savefig(f"{project_dir}/models/model_performances/{label}/lct_auc_epochs.png", dpi=300)
     plt.close()
 
 def lct(args, data_train, data_test, labels_train, labels_test, batch_size, train_its, test_its):
@@ -437,7 +440,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
 
     # Display the mean
     plt.title(f"top Mean Pearson Coefficient: {mean_value:.2f}")
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/top_pearson_matrix_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/{args.label}/top_pearson_matrix_{args.lct_best}.png")
     # plt.show()
     plt.close()
 
@@ -450,7 +453,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
     plt.ylabel('Density')
     plt.title('Distribution of Pearson Coefficients for Top')
     plt.legend()
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/top_pearson_distribution_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/{args.label}/top_pearson_distribution_{args.lct_best}.png")
     # plt.show()
     plt.close()
 
@@ -477,7 +480,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
 
     fig.suptitle('Top Pair Plots')
     plt.subplots_adjust(wspace=0.4, hspace=0.4)  # Increase spacing between subplots
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/top_pair_plots_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/{args.label}/top_pair_plots_{args.lct_best}.png")
 #     plt.show()
     plt.close()
 
@@ -527,7 +530,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
 
     fig.suptitle('QCD Pair Plots')
     plt.subplots_adjust(wspace=0.4, hspace=0.4)  # Increase spacing between subplots
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/QCD_pair_plots_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/{args.label}/QCD_pair_plots_{args.lct_best}.png")
     # plt.show()
     plt.close()
 
@@ -553,7 +556,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
 
     # Display the mean
     plt.title(f"QCD Mean Pearson Coefficient: {mean_value:.2f}")
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/QCD_pearson_matrix_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/{args.label}/QCD_pearson_matrix_{args.lct_best}.png")
     # plt.show()
     plt.close()
 
@@ -566,7 +569,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
     plt.ylabel('Density')
     plt.title('Distribution of Pearson Coefficients for QCD')
     plt.legend()
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/QCD_pearson_distribution_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/{args.label}/QCD_pearson_distribution_{args.lct_best}.png")
     # plt.show()
     plt.close()
 
@@ -608,7 +611,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
 
     fig.suptitle('top and QCD', y=1.02)
     plt.tight_layout(pad=2.0)  # Adjust padding for better appearance
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/top_and_QCD_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/{args.label}/top_and_QCD_{args.lct_best}.png")
 #     plt.show()
     plt.close()
 
@@ -677,7 +680,7 @@ def plot_tsne(args,data_train, data_test, labels_train, labels_test, batch_size,
     ax.set_xticklabels([])
     plt.title("t-SNE visualization of jet features")
     plt.legend(loc='upper right')  # place the legend at the upper right corner
-    plt.savefig(f"/ssl-jet-vol-v2/JetCLR_VICReg/models/model_performances/{args.label}/tsne_plot_{args.lct_best}.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"{project_dir}/models/model_performances/{args.label}/tsne_plot_{args.lct_best}.png", dpi=300, bbox_inches='tight')
     # plt.show()
 
 def main(args):
@@ -738,7 +741,7 @@ if __name__ == "__main__":
         "--dataset-path",
         type=str,
         action="store",
-        default=f"{project_dir}/data/processed/train/",
+        default=f"{project_dir}/data",
         help="Input directory with the dataset for LCT",
     )
     parser.add_argument(
