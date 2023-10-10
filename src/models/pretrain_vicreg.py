@@ -295,7 +295,7 @@ def main(args):
         repr_loss_val_epoch, std_loss_val_epoch, cov_loss_val_epoch = [], [], []
         # invariance, variance, covariance loss recorded for each batch in this epoch
 
-        train_loader = DataLoader(data_train, batch_size)
+        train_loader = DataLoader(data_train, batch_size, num_workers=4)
         model.train()
         pbar_t = tqdm.tqdm(train_loader, total=train_its)
         for _, batch in enumerate(pbar_t):
@@ -320,7 +320,7 @@ def main(args):
         l_train = np.mean(np.array(loss_train_epoch))
         print(f"Training loss: {l_train:.4f}")
         model.eval()
-        valid_loader = DataLoader(data_valid, batch_size)
+        valid_loader = DataLoader(data_valid, batch_size, num_workers=4)
         pbar_v = tqdm.tqdm(valid_loader, total=val_its)
         #     for _, batch in tqdm.tqdm(enumerate(valid_loader)):
         with torch.no_grad():
