@@ -37,7 +37,7 @@ from src.models.pretrain_vicreg import VICReg
 from src.models.jet_augs import *
 
 project_dir = Path(__file__).resolve().parents[2]
-
+print(f"project_dir: {project_dir}")
 
 # load the data files and the label files from the specified directory
 def load_data(dataset_path, flag, n_files=-1):
