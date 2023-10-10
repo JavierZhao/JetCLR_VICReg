@@ -94,8 +94,7 @@ def main(args):
     args.return_embedding = False
     # load the desired trained VICReg model
     model = VICReg(args).to(args.device)
-    args.lct_best = False
-    print(args.lct_best)
+    print(f"args.lct_best: {args.lct_best}")
     if args.lct_best:
         model.load_state_dict(
             torch.load(f"{args.load_vicreg_path}/vicreg_{args.label}_lct_best.pth")
