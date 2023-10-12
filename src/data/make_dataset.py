@@ -3,123 +3,117 @@ import logging
 from pathlib import Path
 from dotenv import find_dotenv, load_dotenv
 import argparse
-import awkward as ak
 import numpy as np
-import pandas as pd
+import awkward as ak
+import uproot
 import vector
-import mplhep as hep
+vector.register_awkward()
 import torch
 import os
 import os.path as osp
+import glob
+import os
 
 
-def zero_pad(arr, max_nconstit=50):
-    """
-    arr: torch tensor
-    """
-    arr = arr[:max_nconstit]
-    if arr.shape[0] < max_nconstit:
-        zeros = torch.zeros(max_nconstit - arr.shape[0], 1)
-        padded_arr = torch.cat([arr, zeros], axis=0)
-        return padded_arr
+
+def _pad(a, maxlen, value=0, dtype='float32'):
+    if isinstance(a, np.ndarray) and a.ndim >= 2 and a.shape[1] == maxlen:
+        return a
+    elif isinstance(a, ak.Array):
+        if a.ndim == 1:
+            a = ak.unflatten(a, 1)
+        a = ak.fill_none(ak.pad_none(a, maxlen, clip=True), value)
+        return ak.values_astype(a, dtype)
     else:
-        return arr
+        x = (np.ones((len(a), maxlen)) * value).astype(dtype)
+        for idx, s in enumerate(a):
+            if not len(s):
+                continue
+            trunc = s[:maxlen].astype(dtype)
+            x[idx, :len(trunc)] = trunc
+        return x
 
+def _clip(a, a_min, a_max):
+    try:
+        return np.clip(a, a_min, a_max)
+    except ValueError:
+        return ak.unflatten(np.clip(ak.flatten(a), a_min, a_max), ak.num(a))
+
+def build_features_and_labels(tree, transform_features=True):
+    # load arrays from the tree
+    a = tree.arrays(filter_name=['part_*', 'jet_pt', 'jet_energy', 'label_*'])
+
+    # compute new features
+    a['part_mask'] = ak.ones_like(a['part_energy'])
+    a['part_pt'] = np.hypot(a['part_px'], a['part_py'])
+    a['part_pt_log'] = np.log(a['part_pt'])
+    a['part_e_log'] = np.log(a['part_energy'])
+    a['part_logptrel'] = np.log(a['part_pt']/a['jet_pt'])
+    a['part_logerel'] = np.log(a['part_energy']/a['jet_energy'])
+    a['part_deltaR'] = np.hypot(a['part_deta'], a['part_dphi'])
+
+    # apply standardization
+    if transform_features:
+        a['part_pt_log'] = (a['part_pt_log'] - 1.7) * 0.7
+        a['part_e_log'] = (a['part_e_log'] - 2.0) * 0.7
+        a['part_logptrel'] = (a['part_logptrel'] - (-4.7)) * 0.7
+        a['part_logerel'] = (a['part_logerel'] - (-4.7)) * 0.7
+        a['part_deltaR'] = (a['part_deltaR'] - 0.2) * 4.0
+
+    feature_list = {
+        'pf_features': [
+            'part_deta',
+            'part_dphi',
+            'part_pt_log', 
+            'part_e_log',
+            'part_logptrel',
+            'part_logerel',
+            'part_deltaR',
+        ],
+        'pf_mask': ['part_mask']
+    }
+
+    out = {}
+    for k, names in feature_list.items():
+        out[k] = np.stack([_pad(a[n], maxlen=128).to_numpy() for n in names], axis=1)
+
+    label_list = ['label_QCD', 'label_Hbb', 'label_Hcc', 'label_Hgg', 'label_H4q', 'label_Hqql', 'label_Zqq', 'label_Wqq', 'label_Tbqq', 'label_Tbl']
+    out['label'] = np.stack([a[n].to_numpy().astype('int') for n in label_list], axis=1)
+    
+    return out
 
 def main(args):
-    """Runs data processing scripts to turn raw data from (../raw) into
-    cleaned data ready to be analyzed (saved in ../processed).
-    Convert h5 to pt files, each containing 100k zero-padded jets cropped to 50 constituents
-    Shape: (100k, 3, 50)
+    """Runs data processing scripts to turn raw data from (/ssl-jet-vol-v2/JetClass/Pythia/) into
+    cleaned data ready to be analyzed (saved in /ssl-jet-vol-v2/JetClass/processed).
+    Convert root to pt files, each containing 1M zero-padded jets cropped to 128 constituents
+    Only contains kinematic features
+    Shape: (1M, 7, 128)
     """
     logger = logging.getLogger(__name__)
     logger.info("making final data set from raw data")
     label = args.label
-    hdf5_file = f"/ssl-jet-vol-v2/toptagging/{label}/raw/{label}.h5"
-    vector.register_awkward()
+    if label == "train":
+        label += "_100M"
+    elif label == "val":
+        label += "_5M"
+    elif label == "test":
+        label += "_20M"
+    data_dir = f"/ssl-jet-vol-v2/JetClass/Pythia/{label}"
+    data_files = glob.glob(f"{data_dir}/*")
+    label_orig = label.split("_")[0] # without _100M, _5M, _20M
+    processed_dir = f"/ssl-jet-vol-v2/JetClass/processed/{label_orig}"
+    os.system(f"mkdir -p {processed_dir}")  # -p: create parent dirs if needed, exist_ok
 
-    print("reading h5 file")
-    df = pd.read_hdf(hdf5_file, key="table")
-    print("finished reading h5 file")
-
-    def _col_list(prefix, max_particles=200):
-        return ["%s_%d" % (prefix, i) for i in range(max_particles)]
-
-    _px = df[_col_list("PX")].values
-    _py = df[_col_list("PY")].values
-    _pz = df[_col_list("PZ")].values
-    _e = df[_col_list("E")].values
-
-    mask = _e > 0
-    n_particles = np.sum(mask, axis=1)
-
-    px = ak.unflatten(_px[mask], n_particles)
-    py = ak.unflatten(_py[mask], n_particles)
-    pz = ak.unflatten(_pz[mask], n_particles)
-    energy = ak.unflatten(_e[mask], n_particles)
-
-    p4 = ak.zip(
-        {
-            "px": px,
-            "py": py,
-            "pz": pz,
-            "energy": energy,
-        },
-        with_name="Momentum4D",
-    )
-
-    jet_p4 = ak.sum(p4, axis=-1)
-
-    # outputs
-    v = {}
-    v["label"] = df["is_signal_new"].values
-
-    v["jet_pt"] = jet_p4.pt.to_numpy()
-    v["jet_eta"] = jet_p4.eta.to_numpy()
-    v["jet_phi"] = jet_p4.phi.to_numpy()
-    v["jet_energy"] = jet_p4.energy.to_numpy()
-    v["jet_mass"] = jet_p4.mass.to_numpy()
-    v["jet_nparticles"] = n_particles
-
-    v["part_px"] = px
-    v["part_py"] = py
-    v["part_pz"] = pz
-    v["part_energy"] = energy
-
-    v["part_deta"] = p4.deltaeta(jet_p4)
-    v["part_dphi"] = p4.deltaphi(jet_p4)
-
-    part_pt = np.hypot(v["part_px"], v["part_py"])
-
-    features = []
-    labels = []
-    c = 0
-    processed_dir = f"/ssl-jet-vol-v2/toptagging/{label}/processed/3_features"
-    os.system(f"mkdir -p {processed_dir}")
-    for jet_index in range(len(df)):
-        pt = zero_pad(torch.from_numpy(np.array(part_pt[jet_index]).reshape(-1, 1)))
-        deta = zero_pad(
-            torch.from_numpy(np.array(v["part_deta"][jet_index]).reshape(-1, 1))
-        )
-        dphi = zero_pad(
-            torch.from_numpy(np.array(v["part_dphi"][jet_index]).reshape(-1, 1))
-        )
-
-        jet = torch.cat([pt, deta, dphi], axis=1).transpose(0, 1)
-        y = torch.tensor(v["label"][jet_index]).long()
-
-        features.append(jet)
-        labels.append(y)
-        print("success")
-
-        if jet_index % 100000 == 0 and jet_index != 0:
-            print(f"saving datafile data_{c}")
-            torch.save(torch.stack(features), osp.join(processed_dir, f"data_{c}.pt"))
-            torch.save(torch.stack(labels), osp.join(processed_dir, f"labels_{c}.pt"))
-            c += 1
-            features = []
-            labels = []
-
+    for i, file in enumerate(data_files):
+        tree = uproot.open(file)['tree']
+        file_name = file.split("/")[-1].split(".")[0]
+        print(f"--- loaded data file {i} {file_name} from `{label}` directory")
+        f_dict = build_features_and_labels(tree)
+        features_tensor = torch.from_numpy(f_dict['pf_features'])
+        labels_tensor = torch.from_numpy(f_dict['label'])
+        torch.save(features_tensor, osp.join(processed_dir, f"{file_name}.pt"))
+        torch.save(labels_tensor, osp.join(processed_dir, f"labels_{file_name}.pt"))
+        print(f"--- saved data file {i} {file_name} to `{processed_dir}` directory")
 
 if __name__ == "__main__":
     log_fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
