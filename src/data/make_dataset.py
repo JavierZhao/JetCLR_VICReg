@@ -87,7 +87,7 @@ def main(args):
     cleaned data ready to be analyzed (saved in /ssl-jet-vol-v2/JetClass/processed).
     Convert root to pt files, each containing 1M zero-padded jets cropped to 128 constituents
     Only contains kinematic features
-    Shape: (1M, 7, 128)
+    Shape: (100k, 7, 128)
     """
     logger = logging.getLogger(__name__)
     logger.info("making final data set from raw data")
