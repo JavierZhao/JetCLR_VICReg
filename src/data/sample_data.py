@@ -42,6 +42,7 @@ def main(args):
     label = args.label
     data_dir = f"/ssl-jet-vol-v2/JetClass/processed/{label}"
     data_files = glob.glob(f"{data_dir}/data/*")
+    print(data_files)
     frac_lst = [1, 5, 10, 50]
     for frac in frac_lst:
         processed_data_dir = f"/ssl-jet-vol-v2/JetClass/processed/{label}_{frac}%/data"
@@ -50,8 +51,8 @@ def main(args):
 
         sampled_data, sampled_labels = [], []
         for i, file in enumerate(data_files):
-            data = torch.load(file)
             data_file_name = file.split("/")[-1].split(".")[0]
+            data = torch.load(file)
             print(f"--- loaded data file {i} {data_file_name} from `{label}` directory")
             label_path = modify_path(file)
             labels = torch.load(label_path)
