@@ -284,7 +284,7 @@ def main(args):
         # invariance, variance, covariance loss recorded for each batch in this epoch
 
         # Training
-        train_loader = DataLoader(data_train, batch_size, num_workers=4)
+        train_loader = DataLoader(data_train, batch_size)
         model.train()
         pbar_t = tqdm.tqdm(train_loader, total=train_its)
         for _, batch in enumerate(pbar_t):
@@ -308,7 +308,7 @@ def main(args):
 
         # Validation
         model.eval()
-        valid_loader = DataLoader(data_valid, batch_size, num_workers=4)
+        valid_loader = DataLoader(data_valid, batch_size)
         pbar_v = tqdm.tqdm(valid_loader, total=val_its)
         with torch.no_grad():
             for _, batch in enumerate(pbar_v):
