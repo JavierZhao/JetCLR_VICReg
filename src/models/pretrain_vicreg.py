@@ -171,7 +171,7 @@ def augmentation(args, x, device):
     Applies all the augmentations specified in the args
     """
     # crop all jets to a fixed number of constituents (default=50)
-    x = crop_jets(x, args.nconstit)
+    # x = crop_jets(x, args.nconstit)
     x = rotate_jets(x, device)
     y = x.clone()
     if args.do_rotation:
@@ -192,29 +192,21 @@ def augmentation(args, x, device):
 
 
 # load the datafiles
-def load_data(dataset_path, flag, n_files=-1):
-    data_files = glob.glob(f"{dataset_path}/{flag}/processed/3_features/*")
-
-    data = []
-    for i, file in enumerate(data_files):
-        data += torch.load(f"{dataset_path}/{flag}/processed/3_features/data_{i}.pt")
-        print(f"--- loaded file {i} from `{flag}` directory")
-        if n_files != -1 and i == n_files - 1:
-            break
-
+def load_data(args, flag):
+    frac = args.percent_data
+    dataset_path = args.dataset_path
+    data_file = f"{dataset_path}/{flag}_{frac}%/data/data.pt"
+    data = torch.load(data_file)
+    print(f"--- loaded data file from `{flag}_{frac}%` directory")            
     return data
 
-
-def load_labels(dataset_path, flag, n_files=-1):
-    data_files = glob.glob(f"{dataset_path}/{flag}/processed/3_features/*")
-
-    data = []
-    for i, file in enumerate(data_files):
-        data += torch.load(f"{dataset_path}/{flag}/processed/3_features/labels_{i}.pt")
-        print(f"--- loaded label file {i} from `{flag}` directory")
-        if n_files != -1 and i == n_files - 1:
-            break
-
+# labels are only used for the LCT
+def load_labels(args, flag):
+    frac = args.percent_data
+    dataset_path = args.dataset_path
+    data_file = f"{dataset_path}/{flag}_{frac}%/label/labels.pt"
+    data = torch.load(data_file)        
+    print(f"--- loaded label file from `{flag}_{frac}%` directory")    
     return data
 
 
@@ -235,27 +227,23 @@ def main(args):
     outdir = args.outdir
     label = args.label
 
-    model_loc = f"{outdir}/trained_models/"
-    model_perf_loc = f"{outdir}/model_performances/{label}"
-    model_dict_loc = f"{outdir}/model_dicts/"
+    model_loc = f"{outdir}/trained_models/JetClass/{label}"
+    model_perf_loc = f"{outdir}/model_performances/JetClass/{label}"
     os.system(
-        f"mkdir -p {model_loc} {model_perf_loc} {model_dict_loc}"
+        f"mkdir -p {model_loc} {model_perf_loc} "
     )  # -p: create parent dirs if needed, exist_ok
 
     # prepare data
-    data_train = load_data(args.dataset_path, "train", n_files=args.num_train_files)
-    data_valid = load_data(args.dataset_path, "val", n_files=args.num_val_files)
-    data_test = load_data(args.dataset_path, "test", n_files=1)
+    data_train = load_data(args, "train")
+    data_valid = load_data(args, "val")
+    data_test = load_data(args, "test")
 
-    labels_train = load_labels(args.dataset_path, "train", n_files=args.num_train_files)
-    labels_test = load_labels(args.dataset_path, "test", n_files=1)
+    labels_train = load_labels(args, "train")
+    labels_test = load_labels(args, "test")
 
     # only take the first 10k jets for LCT
     labels_train = labels_train[:10000]
     labels_test = labels_test[:10000]
-
-    labels_train = torch.tensor([t.item() for t in labels_train])
-    labels_test = torch.tensor([t.item() for t in labels_test])
 
     n_train = len(data_train)
     n_val = len(data_valid)
@@ -295,16 +283,15 @@ def main(args):
         repr_loss_val_epoch, std_loss_val_epoch, cov_loss_val_epoch = [], [], []
         # invariance, variance, covariance loss recorded for each batch in this epoch
 
+        # Training
         train_loader = DataLoader(data_train, batch_size, num_workers=4)
         model.train()
         pbar_t = tqdm.tqdm(train_loader, total=train_its)
         for _, batch in enumerate(pbar_t):
             batch = batch.to(args.device)
-            # batch = convert_x(batch, args.device)
             optimizer.zero_grad()
             if args.return_all_losses:
                 loss, repr_loss, std_loss, cov_loss = model.forward(batch)
-                #             print(loss, repr_loss, std_loss, cov_loss)
                 repr_loss_train_epoch.append(repr_loss.detach().cpu().item())
                 std_loss_train_epoch.append(std_loss.detach().cpu().item())
                 cov_loss_train_epoch.append(cov_loss.detach().cpu().item())
@@ -316,17 +303,16 @@ def main(args):
             loss_train_batches.append(loss)
             loss_train_epoch.append(loss)
             pbar_t.set_description(f"Training loss: {loss:.4f}")
-        #             print(f"Training loss: {loss:.4f}")
         l_train = np.mean(np.array(loss_train_epoch))
         print(f"Training loss: {l_train:.4f}")
+
+        # Validation
         model.eval()
         valid_loader = DataLoader(data_valid, batch_size, num_workers=4)
         pbar_v = tqdm.tqdm(valid_loader, total=val_its)
-        #     for _, batch in tqdm.tqdm(enumerate(valid_loader)):
         with torch.no_grad():
             for _, batch in enumerate(pbar_v):
                 batch = batch.to(args.device)
-                # batch = convert_x(batch, args.device)  # [batch_size, 3, n_constit]
                 if args.return_all_losses:
                     loss, repr_loss, std_loss, cov_loss = model.forward(batch)
                     repr_loss_val_epoch.append(repr_loss.detach().cpu().item())
@@ -338,7 +324,6 @@ def main(args):
                 loss_val_batches.append(loss)
                 loss_val_epoch.append(loss)
                 pbar_v.set_description(f"Validation loss: {loss:.4f}")
-        #             print(f"Validation loss: {loss:.4f}")
         l_val = np.mean(np.array(loss_val_epoch))
         print(f"Validation loss: {l_val:.4f}")
         loss_val_epochs.append(l_val)
@@ -365,10 +350,10 @@ def main(args):
             l_val_best = l_val
             torch.save(model.state_dict(), f"{model_loc}/vicreg_{label}_best.pth")
         torch.save(model.state_dict(), f"{model_loc}/vicreg_{label}_last.pth")
-        # save model performance
+        # save model performances
         np.save(
-        f"{model_perf_loc}/vicreg_{label}_loss_train_epochs.npy",
-        np.array(loss_train_epochs),
+            f"{model_perf_loc}/vicreg_{label}_loss_train_epochs.npy",
+            np.array(loss_train_epochs),
         )
         np.save(
             f"{model_perf_loc}/vicreg_{label}_loss_train_batches.npy",
@@ -416,18 +401,13 @@ def main(args):
             test_loader = DataLoader(data_test[:10000], args.batch_size)
             tr_reps = []
             batch_size = args.batch_size
-            # train_its = int(10000 / batch_size)
-            # test_its = int(10000 / batch_size)
-            # pbar = tqdm.tqdm(train_loader, total=train_its)
             for i, batch in enumerate(train_loader):
                 batch = batch.to(args.device)
                 tr_reps.append(
                     model(batch, return_rep=True)[0].detach().cpu().numpy()
                 )
-                # pbar.set_description(f"{i}")
             tr_reps = np.concatenate(tr_reps)
             te_reps = []
-            # pbar = tqdm.tqdm(test_loader, total=test_its)
             for i, batch in enumerate(test_loader):
                 batch = batch.to(args.device)
                 te_reps.append(
@@ -461,8 +441,6 @@ def main(args):
             torch.save(model.state_dict(), f"{model_loc}/vicreg_{label}_lct_best.pth")
     #  training complete
 
-    
-
 
 if __name__ == "__main__":
     """This is executed when run from the command line"""
@@ -472,20 +450,14 @@ if __name__ == "__main__":
         "--dataset-path",
         type=str,
         action="store",
-        default=f"{project_dir}/data/processed/train/",
+        default="/ssl-jet-vol-v2/JetClass/processed",
         help="Input directory with the dataset",
     )
     parser.add_argument(
-        "--num-train-files",
+        "--percent-data",
         type=int,
-        default=12,
-        help="Number of files to use for training",
-    )
-    parser.add_argument(
-        "--num-val-files",
-        type=int,
-        default=4,
-        help="Number of files to use for validation",
+        default=100,
+        help="Percent of dataset to use for training, options: 1, 5, 10, 50, 100",
     )
     parser.add_argument(
         "--outdir",
@@ -508,7 +480,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="feature_dim",
-        default=1000,
+        default=32,
         help="dimension of learned feature space",
     )
     parser.add_argument(
@@ -516,7 +488,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="model_dim",
-        default=1000,
+        default=32,
         help="dimension of the transformer-encoder",
     )
     parser.add_argument(
@@ -556,7 +528,7 @@ if __name__ == "__main__":
         type=int,
         action="store",
         dest="batch_size",
-        default=1024,
+        default=2048,
         help="batch_size",
     )
     # parser.add_argument(
