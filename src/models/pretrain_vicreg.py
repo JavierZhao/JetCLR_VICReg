@@ -177,8 +177,8 @@ def augmentation(args, x, device):
     if args.do_rotation:
         y = rotate_jets(y, device)
     if args.do_cf:
-        y = collinear_fill_jets(np.array(y.cpu()), device)
-        y = collinear_fill_jets(np.array(y.cpu()), device)
+        y = collinear_fill_jets(y, device)
+        y = collinear_fill_jets(y, device)
     if args.do_ptd:
         y = distort_jets(y, device, strength=args.ptst, pT_clip_min=args.ptcm)
     if args.do_translation:
