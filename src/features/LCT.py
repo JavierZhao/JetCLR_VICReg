@@ -304,7 +304,7 @@ if __name__ == "__main__":
         help="share parameters of backbone",
     )
     parser.add_argument(
-        "metric",
+        "--metric",
         type=str,
         action="store",
         default="auc",
