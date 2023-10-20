@@ -679,16 +679,13 @@ def main(args):
     args.augmentation = augmentation_lct
     
      # load the training and testing dataset
-    data_train = load_data(args.dataset_path, "train", n_files=args.num_train_files)
-    data_test = load_data(args.dataset_path, "test", n_files=args.num_test_files)
-    labels_train = load_labels(args.dataset_path, "train", n_files=args.num_train_files)
-    labels_test = load_labels(args.dataset_path, "test", n_files=args.num_test_files)
+    data_train = load_data(args, "train")
+    data_test = load_data(args, "test")
 
-    # concatenate the training and testing datasets
-    data_train = torch.stack(data_train)
-    data_test = torch.stack(data_test)
-    labels_train = torch.tensor([t.item() for t in labels_train])
-    labels_test = torch.tensor([t.item() for t in labels_test])
+    labels_train = load_labels(args, "train")
+    labels_test = load_labels(args, "test")
+
+
 
     n_train = data_train.shape[0]
     n_test = data_test.shape[0]

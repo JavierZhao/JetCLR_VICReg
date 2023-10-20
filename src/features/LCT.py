@@ -105,7 +105,12 @@ def main(args):
         )
         print(f"loaded {args.load_vicreg_path}/vicreg_{args.label}_best.pth")
     
-
+    # print number of hidden layers and hidden size
+    if args.n_hidden != 0:
+        print(f"n_hidden: {args.n_hidden}, hidden_size: {args.hidden_size}", flush=True)
+    else:
+        print("no hidden layers")
+    
     # load the training and testing dataset
     data_train = load_data(args.dataset_path, "train", n_files=args.num_train_files)
     data_test = load_data(args.dataset_path, "test", n_files=args.num_test_files)
