@@ -30,29 +30,21 @@ project_dir = Path(__file__).resolve().parents[2]
 
 
 # load the data files and the label files from the specified directory
-def load_data(dataset_path, flag, n_files=-1):
-    data_files = glob.glob(f"{dataset_path}/{flag}/processed/3_features/*")
-
-    data = []
-    for i, file in enumerate(data_files):
-        data += torch.load(f"{dataset_path}/{flag}/processed/3_features/data_{i}.pt")
-        print(f"--- loaded data file {i} from `{flag}` directory")
-        if n_files != -1 and i == n_files - 1:
-            break
-
+def load_data(args, flag):
+    frac = 1
+    dataset_path = args.dataset_path
+    data_file = f"{dataset_path}/{flag}_{frac}%/data/data.pt"
+    data = torch.load(data_file)
+    print(f"--- loaded data file from `{flag}_{frac}%` directory")            
     return data
 
-
-def load_labels(dataset_path, flag, n_files=-1):
-    data_files = glob.glob(f"{dataset_path}/{flag}/processed/3_features/*")
-
-    data = []
-    for i, file in enumerate(data_files):
-        data += torch.load(f"{dataset_path}/{flag}/processed/3_features/labels_{i}.pt")
-        print(f"--- loaded label file {i} from `{flag}` directory")
-        if n_files != -1 and i == n_files - 1:
-            break
-
+# labels are only used for the LCT
+def load_labels(args, flag):
+    frac = 1
+    dataset_path = args.dataset_path
+    data_file = f"{dataset_path}/{flag}_{frac}%/label/labels.pt"
+    data = torch.load(data_file)        
+    print(f"--- loaded label file from `{flag}_{frac}%` directory")    
     return data
 
 
@@ -112,16 +104,11 @@ def main(args):
         print("no hidden layers")
     
     # load the training and testing dataset
-    data_train = load_data(args.dataset_path, "train", n_files=args.num_train_files)
-    data_test = load_data(args.dataset_path, "test", n_files=args.num_test_files)
-    labels_train = load_labels(args.dataset_path, "train", n_files=args.num_train_files)
-    labels_test = load_labels(args.dataset_path, "test", n_files=args.num_test_files)
+    data_train = load_data(args, "train")
+    data_test = load_data(args, "test")
 
-    # concatenate the training and testing datasets
-    data_train = torch.stack(data_train)
-    data_test = torch.stack(data_test)
-    labels_train = torch.tensor([t.item() for t in labels_train])
-    labels_test = torch.tensor([t.item() for t in labels_test])
+    labels_train = load_labels(args, "train")
+    labels_test = load_labels(args, "test")
 
     n_train = data_train.shape[0]
     n_test = data_test.shape[0]
