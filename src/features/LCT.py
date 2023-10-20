@@ -94,8 +94,7 @@ def main(args):
     args.return_embedding = False
     # load the desired trained VICReg model
     model = VICReg(args).to(args.device)
-    print(f"args.lct_best: {args.lct_best}")
-    if args.lct_best:
+    if args.metric == "auc":
         model.load_state_dict(
             torch.load(f"{args.load_vicreg_path}/vicreg_{args.label}_lct_best.pth")
         )
@@ -305,12 +304,11 @@ if __name__ == "__main__":
         help="share parameters of backbone",
     )
     parser.add_argument(
-        "--lct-best",
-        type=bool,
+        "metric",
+        type=str,
         action="store",
-        dest="lct_best",
-        default=False,
-        help="use the model with best lct, otherwise use the one with lowest val loss",
+        default="auc",
+        help="metric to use for loading best model",
     )
     parser.add_argument(
         "--epoch", type=int, action="store", dest="epoch", default=200, help="Epochs"
