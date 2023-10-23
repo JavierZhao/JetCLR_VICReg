@@ -39,40 +39,59 @@ def main(args):
     """
     logger = logging.getLogger(__name__)
     logger.info("making final data set from raw data")
+    
     label = args.label
     data_dir = f"/ssl-jet-vol-v2/JetClass/processed/{label}"
     data_files = glob.glob(f"{data_dir}/data/*")
     frac_lst = [10, 50]
+    
     for frac in frac_lst:
+        print(f"Sampling {frac}% of data from `{label}` directory")
         processed_data_dir = f"/ssl-jet-vol-v2/JetClass/processed/{label}_{frac}%/data"
         processed_label_dir = f"/ssl-jet-vol-v2/JetClass/processed/{label}_{frac}%/label"
         os.system(f"mkdir -p {processed_data_dir} {processed_label_dir}")  # -p: create parent dirs if needed, exist_ok
 
-        sampled_data, sampled_labels = [], []
+        all_sampled_data = []
+        all_sampled_labels = []
+        
         for i, file in enumerate(data_files):
-            data_file_name = file.split("/")[-1].split(".")[0]
             data = torch.load(file)
+            data_file_name = file.split("/")[-1].split(".")[0]
             print(f"--- loaded data file {i} {data_file_name} from `{label}` directory")
+
             label_path = modify_path(file)
             labels = torch.load(label_path)
             labels_file_name = label_path.split("/")[-1].split(".")[0]
             print(f"--- loaded data file {i} {labels_file_name} from `{label}` directory")
+
             # Calculate the number of samples you need
             num_samples = int(frac/100 * data.shape[0])
 
             # Generate random indices
             indices = torch.randperm(data.shape[0])[:num_samples]
 
-            # Use the indices to sample from data and labels
-            sampled_data += data[indices]
-            sampled_labels += labels[indices]
+            sampled_data = data[indices].cpu()
+            sampled_labels = labels[indices].cpu()
 
-        sampled_data = torch.stack(sampled_data)
-        sampled_labels = torch.stack(sampled_labels)
-            
-        torch.save(sampled_data, osp.join(processed_data_dir, "data.pt"))
-        torch.save(sampled_labels, osp.join(processed_label_dir, "labels.pt"))
+            all_sampled_data.append(sampled_data)
+            all_sampled_labels.append(sampled_labels)
+
+            # Free up memory
+            del data, labels, sampled_data, sampled_labels
+            # torch.cuda.empty_cache()
+
+        # sampled_data_tensor = torch.cat(all_sampled_data, dim=0)
+        # sampled_labels_tensor = torch.cat(all_sampled_labels, dim=0)
+        sampled_data_tensor = torch.stack(sampled_data)
+        sampled_labels_tensor = torch.stack(sampled_labels)
+
+        torch.save(sampled_data_tensor, osp.join(processed_data_dir, "data.pt"))
+        torch.save(sampled_labels_tensor, osp.join(processed_label_dir, "labels.pt"))
+        
+        del sampled_data_tensor, sampled_labels_tensor
+        # torch.cuda.empty_cache()
         print("finished sampling and saving data")
+
 
 if __name__ == "__main__":
     log_fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
