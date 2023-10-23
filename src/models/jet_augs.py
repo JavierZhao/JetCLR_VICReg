@@ -97,7 +97,7 @@ def normalise_pts(batch, device):
     
     # If total_pt_per_jet is 0, replace it with 1 to avoid division by zero
     total_pt_per_jet = torch.where(total_pt_per_jet == 0, torch.tensor(1.).to(device), total_pt_per_jet)
-    print(total_pt_per_jet)
+    # print(total_pt_per_jet)
     
     # Normalize pT values by dividing with the corresponding jet total
     normalized_pt_values = pt_values / total_pt_per_jet
@@ -159,7 +159,7 @@ def distort_jets(batch, device, strength=0.1, pT_clip_min=0.1):
     shift = (
         torch.cat([shift_eta, shift_phi, torch.zeros(batch[:, 2:,:].shape).to(device)], dim=1).to(device)
     )
-    print(shift)
+    # print(shift)
 
     shifted_batch = batch + shift
     
