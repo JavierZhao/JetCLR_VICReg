@@ -42,8 +42,7 @@ def main(args):
     label = args.label
     data_dir = f"/ssl-jet-vol-v2/JetClass/processed/{label}"
     data_files = glob.glob(f"{data_dir}/data/*")
-    print(data_files)
-    frac_lst = [1, 5, 10, 50]
+    frac_lst = [10, 50]
     for frac in frac_lst:
         processed_data_dir = f"/ssl-jet-vol-v2/JetClass/processed/{label}_{frac}%/data"
         processed_label_dir = f"/ssl-jet-vol-v2/JetClass/processed/{label}_{frac}%/label"
