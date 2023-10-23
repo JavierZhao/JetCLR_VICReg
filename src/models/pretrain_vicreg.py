@@ -180,7 +180,7 @@ def augmentation(args, x, device):
         y = collinear_fill_jets(y, device)
         y = collinear_fill_jets(y, device)
     if args.do_ptd:
-        y = distort_jets(y, device, strength=args.ptst, pT_clip_min=args.ptcm)
+        y = distort_jets(y, device, args.ptst, args.ptcm)
     if args.do_translation:
         y = translate_jets(y, device, width=args.trsw)
         x = translate_jets(x, device, width=args.trsw)
