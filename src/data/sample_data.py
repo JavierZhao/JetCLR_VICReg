@@ -62,7 +62,8 @@ def main(args):
 
         # Pre-allocate memory
         all_sampled_data = torch.empty((total_samples, 7, 128))  # adjust dimensions accordingly
-        all_sampled_labels = torch.empty(total_samples)  # adjust dimensions if needed
+        all_sampled_labels = torch.empty(total_samples, 10)  # adjust dimensions if needed
+        print(all_sampled_labels.shape)
 
         offset = 0  # keeps track of where to insert samples in the pre-allocated tensor
         for i, file in enumerate(data_files):
