@@ -41,7 +41,7 @@ def translate_jets(batch, device, width=1.0):
     shift_phi = shift_phi.unsqueeze(1).to(device)
 
     shift = (
-        torch.cat([shift_eta, shift_phi, torch.zeros(bb[:, 2:,:].shape).to(device)], dim=1).to(device)
+        torch.cat([shift_eta, shift_phi, torch.zeros(batch[:, 2:,:].shape).to(device)], dim=1).to(device)
     )
 
     shifted_batch = batch + shift
@@ -134,7 +134,7 @@ def crop_jets(batch, nc=50):
     return batch_crop[:, :, 0:nc]
 
 
-def distort_jets(batch, strength=0.1, pT_clip_min=0.1):
+def distort_jets(batch, device, strength=0.1, pT_clip_min=0.1):
     '''
     Input: batch of jets, shape (batchsize, 7, n_constit)
     dim 1 ordering: 'part_deta','part_dphi','part_pt_log', 'part_e_log', 'part_logptrel', 'part_logerel','part_deltaR',
@@ -157,7 +157,7 @@ def distort_jets(batch, strength=0.1, pT_clip_min=0.1):
     shift_phi = shift_phi.unsqueeze(1).to(device)
     
     shift = (
-        torch.cat([shift_eta, shift_phi, torch.zeros(bb[:, 2:,:].shape).to(device)], dim=1).to(device)
+        torch.cat([shift_eta, shift_phi, torch.zeros(batch[:, 2:,:].shape).to(device)], dim=1).to(device)
     )
     print(shift)
 
