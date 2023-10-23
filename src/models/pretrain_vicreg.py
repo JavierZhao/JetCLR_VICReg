@@ -250,8 +250,8 @@ def main(args):
 
     args.augmentation = augmentation
 
-    args.x_inputs = 3
-    args.y_inputs = 3
+    args.x_inputs = data_train.shape[1]
+    args.y_inputs = data_train.shape[1]
 
     args.x_backbone, args.y_backbone = get_backbones(args)
     model = VICReg(args).to(args.device)
