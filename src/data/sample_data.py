@@ -82,8 +82,8 @@ def main(args):
 
         # sampled_data_tensor = torch.cat(all_sampled_data, dim=0)
         # sampled_labels_tensor = torch.cat(all_sampled_labels, dim=0)
-        sampled_data_tensor = torch.stack(sampled_data)
-        sampled_labels_tensor = torch.stack(sampled_labels)
+        sampled_data_tensor = torch.stack(all_sampled_data)
+        sampled_labels_tensor = torch.stack(all_sampled_labels)
 
         torch.save(sampled_data_tensor, osp.join(processed_data_dir, "data.pt"))
         torch.save(sampled_labels_tensor, osp.join(processed_label_dir, "labels.pt"))
