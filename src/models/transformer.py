@@ -88,7 +88,8 @@ class Transformer(nn.Module):
         # (batch_size, n_constit)
         if use_continuous_mask:
             pt_mask = x[:, :, 2] != 0
-            pT = torch.exp(x[:, :, 2][pt_mask])
+            pT = x[:, :, 2].clone()
+            pT[pt_mask] = torch.exp(pT[pt_mask])
         if use_mask:
             mask = self.make_mask(pT_zero).to(x.device)
         elif use_continuous_mask:
