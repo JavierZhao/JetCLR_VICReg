@@ -424,7 +424,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
 
     # Display the mean
     plt.title(f"top Mean Pearson Coefficient: {mean_value:.2f}")
-    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/top_pearson_matrix_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/top_pearson_matrix_{args.metric}.png")
     # plt.show()
     plt.close()
 
@@ -437,7 +437,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
     plt.ylabel('Density')
     plt.title('Distribution of Pearson Coefficients for Top')
     plt.legend()
-    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/top_pearson_distribution_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/top_pearson_distribution_{args.metric}.png")
     # plt.show()
     plt.close()
 
@@ -464,7 +464,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
 
     fig.suptitle('Top Pair Plots')
     plt.subplots_adjust(wspace=0.4, hspace=0.4)  # Increase spacing between subplots
-    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/top_pair_plots_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/top_pair_plots_{args.metric}.png")
 #     plt.show()
     plt.close()
 
@@ -514,7 +514,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
 
     fig.suptitle('QCD Pair Plots')
     plt.subplots_adjust(wspace=0.4, hspace=0.4)  # Increase spacing between subplots
-    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/QCD_pair_plots_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/QCD_pair_plots_{args.metric}.png")
     # plt.show()
     plt.close()
 
@@ -540,7 +540,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
 
     # Display the mean
     plt.title(f"QCD Mean Pearson Coefficient: {mean_value:.2f}")
-    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/QCD_pearson_matrix_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/QCD_pearson_matrix_{args.metric}.png")
     # plt.show()
     plt.close()
 
@@ -553,7 +553,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
     plt.ylabel('Density')
     plt.title('Distribution of Pearson Coefficients for QCD')
     plt.legend()
-    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/QCD_pearson_distribution_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/QCD_pearson_distribution_{args.metric}.png")
     # plt.show()
     plt.close()
 
@@ -595,7 +595,7 @@ def plot_pair_plots(args,data_train, data_test, labels_train, labels_test, batch
 
     fig.suptitle('top and QCD', y=1.02)
     plt.tight_layout(pad=2.0)  # Adjust padding for better appearance
-    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/top_and_QCD_{args.lct_best}.png")
+    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/top_and_QCD_{args.metric}.png")
 #     plt.show()
     plt.close()
 
@@ -662,7 +662,7 @@ def plot_tsne(args,data_train, data_test, labels_train, labels_test, batch_size,
     ax.set_xticklabels([])
     plt.title("t-SNE visualization of jet features")
     plt.legend(loc='upper right')  # place the legend at the upper right corner
-    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/tsne_plot_{args.lct_best}.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"{project_dir}/models/model_performances/JetClass/{args.label}/tsne_plot_{args.metric}.png", dpi=300, bbox_inches='tight')
     # plt.show()
 
 def main(args):
