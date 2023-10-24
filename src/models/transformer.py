@@ -75,8 +75,8 @@ class Transformer(nn.Module):
         mult_reps=False,
     ):
         """
-        input here is (batch_size, n_constit, 3)
-        but transformer expects (n_constit, batch_size, 3) so we need to transpose
+        input here is (batch_size, n_constit, 7)
+        but transformer expects (n_constit, batch_size, 7) so we need to transpose
         if use_mask is True, will mask out all inputs with pT=0
         """
         assert not (use_mask and use_continuous_mask)
@@ -84,10 +84,11 @@ class Transformer(nn.Module):
         x = inpt + 0.0
         # (batch_size, n_constit)
         if use_mask:
-            pT_zero = x[:, :, 0] == 0
+            pT_zero = x[:, :, 2] == 0
         # (batch_size, n_constit)
         if use_continuous_mask:
-            pT = x[:, :, 0]
+            pt_mask = x[:, :, 2] != 0
+            pT = torch.exp(x[:, :, 2][pt_mask])
         if use_mask:
             mask = self.make_mask(pT_zero).to(x.device)
         elif use_continuous_mask:
