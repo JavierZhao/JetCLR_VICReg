@@ -298,6 +298,7 @@ def main(args):
             else:
                 loss = model.forward(batch)
             loss.backward()
+            print(f"Loss: {loss:.4f}")
             optimizer.step()
             loss = loss.detach().cpu().item()
             loss_train_batches.append(loss)
