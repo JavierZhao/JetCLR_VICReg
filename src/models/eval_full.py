@@ -256,11 +256,11 @@ def plot_losses(args):
     # plt.show()
 
     # Plot LCT AUC vs epochs
-    plt.plot(lct_auc_epochs)
-    plt.title(f"LCT AUC vs epochs, max: {np.max(lct_auc_epochs):.4f}")
-    plt.tight_layout()
-    plt.savefig(f"{project_dir}/models/model_performances/Top_Tagging/{label}/lct_auc_epochs.png", dpi=300)
-    plt.close()
+    # plt.plot(lct_auc_epochs)
+    # plt.title(f"LCT AUC vs epochs, max: {np.max(lct_auc_epochs):.4f}")
+    # plt.tight_layout()
+    # plt.savefig(f"{project_dir}/models/model_performances/Top_Tagging/{label}/lct_auc_epochs.png", dpi=300)
+    # plt.close()
 
 def lct(args, data_train, data_test, labels_train, labels_test, batch_size, train_its, test_its):
     args.x_backbone, args.y_backbone = get_backbones(args)
