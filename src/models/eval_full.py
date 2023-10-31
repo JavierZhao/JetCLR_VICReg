@@ -111,17 +111,20 @@ def augmentation(args, x, device):
 def plot_losses(args):
     label = args.label
     model_label = "vicreg_" + label
-    cov_loss_train_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_cov_loss_train_epochs.npy")
-    cov_loss_val_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_cov_loss_val_epochs.npy")
-    loss_train_batches = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_loss_train_batches.npy")
-    loss_train_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_loss_train_epochs.npy")
-    loss_val_batches = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_loss_val_batches.npy")
-    loss_val_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_loss_val_epochs.npy")
-    repr_loss_train_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_repr_loss_train_epochs.npy")
-    repr_loss_val_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_repr_loss_val_epochs.npy")
-    std_loss_train_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_std_loss_train_epochs.npy")
-    std_loss_val_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_std_loss_val_epochs.npy")
-    lct_auc_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_lct_auc_epochs.npy")
+    try:
+        cov_loss_train_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_cov_loss_train_epochs.npy")
+        cov_loss_val_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_cov_loss_val_epochs.npy")
+        loss_train_batches = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_loss_train_batches.npy")
+        loss_train_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_loss_train_epochs.npy")
+        loss_val_batches = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_loss_val_batches.npy")
+        loss_val_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_loss_val_epochs.npy")
+        repr_loss_train_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_repr_loss_train_epochs.npy")
+        repr_loss_val_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_repr_loss_val_epochs.npy")
+        std_loss_train_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_std_loss_train_epochs.npy")
+        std_loss_val_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_std_loss_val_epochs.npy")
+        lct_auc_epochs = np.load(f"{project_dir}/models/model_performances/Top_Tagging/{label}/{model_label}_lct_auc_epochs.npy")
+    except ValueError:
+        print("value error")
 
     # Plot loss curves in training
     fontsize = 20
