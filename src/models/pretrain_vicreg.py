@@ -251,10 +251,10 @@ def main(args):
     labels_train = labels_train[:10000]
     labels_test = labels_test[:10000]
 
-    if args.debug:
-        data_train = data_train[:10000]
-        data_valid = data_valid[:10000]
-        data_test = data_test[:10000]
+    # if args.debug:
+    #     data_train = data_train[:10000]
+    #     data_valid = data_valid[:10000]
+    #     data_test = data_test[:10000]
 
     n_train = len(data_train)
     n_val = len(data_valid)
