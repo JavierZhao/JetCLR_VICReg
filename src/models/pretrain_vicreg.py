@@ -87,8 +87,9 @@ class VICReg(nn.Module):
             x_aug, y_aug = self.augmentation(
                 self.args, x, self.args.device
             )  # [batch_size, n_constit, 3]
-        #         print(f"x_aug contains nan: {contains_nan(x_aug)}")
-        #         print(f"y_aug contains nan: {contains_nan(y_aug)}")
+            if args.debug:
+                print(f"x_aug contains nan: {contains_nan(x_aug)}")
+                print(f"y_aug contains nan: {contains_nan(y_aug)}")
 
         # x_xform = self.x_transform.to(torch.double)(
         #     x_aug.x.double()
@@ -103,15 +104,17 @@ class VICReg(nn.Module):
         y_rep = self.y_backbone(
             y_aug, use_mask=self.args.mask, use_continuous_mask=self.args.cmask
         )  # [batch_size, output_dim]
-        #         print(f"x_rep contains nan: {contains_nan(x_rep)}")
-        #         print(f"y_rep contains nan: {contains_nan(y_rep)}")
+        if args.debug:
+            print(f"x_rep contains nan: {contains_nan(x_rep)}")
+            print(f"y_rep contains nan: {contains_nan(y_rep)}")
         if return_rep:
             return x_rep, y_rep
 
         x_emb = self.x_projector(x_rep)  # [batch_size, embedding_size]
         y_emb = self.y_projector(y_rep)  # [batch_size, embedding_size]
-        #         print(f"x_emb contains nan: {contains_nan(x_emb)}")
-        #         print(f"y_emb contains nan: {contains_nan(y_emb)}")
+        if args.debug:
+            print(f"x_emb contains nan: {contains_nan(x_emb)}")
+            print(f"y_emb contains nan: {contains_nan(y_emb)}")
         if self.return_embedding:
             return x_emb, y_emb
         x = x_emb
@@ -209,6 +212,9 @@ def load_labels(args, flag):
     print(f"--- loaded label file from `{flag}_{frac}%` directory")    
     return data
 
+def contains_nan(tensor):
+    has_nan = torch.isnan(tensor)
+    return torch.any(has_nan).item()
 
 def main(args):
     # define the global base device
@@ -245,8 +251,14 @@ def main(args):
     labels_train = labels_train[:10000]
     labels_test = labels_test[:10000]
 
+    if args.debug:
+        data_train = data_train[:10000]
+        data_valid = data_valid[:10000]
+        data_test = data_test[:10000]
+
     n_train = len(data_train)
     n_val = len(data_valid)
+    print(f"Number of training jets: {n_train}", flush=True)
 
     args.augmentation = augmentation
 
@@ -295,17 +307,20 @@ def main(args):
                 repr_loss_train_epoch.append(repr_loss.detach().cpu().item())
                 std_loss_train_epoch.append(std_loss.detach().cpu().item())
                 cov_loss_train_epoch.append(cov_loss.detach().cpu().item())
+                if args.debug:
+                    print(f"Loss: {loss.detach().cpu().item():.4f}")
+                    print(f"Repr loss: {repr_loss.detach().cpu().item():.4f}")
+                    print(f"Std loss: {std_loss.detach().cpu().item():.4f}")
+                    print(f"Cov loss: {cov_loss.detach().cpu().item():.4f}")
             else:
                 loss = model.forward(batch)
             loss.backward()
-            print(f"Loss: {loss:.4f}")
             optimizer.step()
             loss = loss.detach().cpu().item()
             loss_train_batches.append(loss)
             loss_train_epoch.append(loss)
             pbar_t.set_description(f"Training loss: {loss:.4f}")
         l_train = np.mean(np.array(loss_train_epoch))
-        print(f"Training loss: {l_train:.4f}")
 
         # Validation
         model.eval()
@@ -320,13 +335,17 @@ def main(args):
                     std_loss_val_epoch.append(std_loss.detach().cpu().item())
                     cov_loss_val_epoch.append(cov_loss.detach().cpu().item())
                     loss = loss.detach().cpu().item()
+                    if args.debug:
+                        print(f"Loss: {loss:.4f}")
+                        print(f"Repr loss: {repr_loss.detach().cpu().item():.4f}")
+                        print(f"Std loss: {std_loss.detach().cpu().item():.4f}")
+                        print(f"Cov loss: {cov_loss.detach().cpu().item():.4f}")
                 else:
                     loss = model.forward(batch).cpu().item()
                 loss_val_batches.append(loss)
                 loss_val_epoch.append(loss)
                 pbar_v.set_description(f"Validation loss: {loss:.4f}")
         l_val = np.mean(np.array(loss_val_epoch))
-        print(f"Validation loss: {l_val:.4f}")
         loss_val_epochs.append(l_val)
         loss_train_epochs.append(l_train)
 
@@ -649,6 +668,14 @@ if __name__ == "__main__":
         dest="return_all_losses",
         default=True,
         help="return the three terms in the loss function as well",
+    )
+    parser.add_argument(
+        "--debug",
+        type=bool,
+        action="store",
+        dest="debug",
+        default=False,
+        help="Debug mode, use a small subset of dataset and a lot of print statements",
     )
 
     args = parser.parse_args()
