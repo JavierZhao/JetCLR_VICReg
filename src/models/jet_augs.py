@@ -142,7 +142,7 @@ def collinear_fill_jets(batch, device):
     Output: batch of jets with collinear splittings, the function attempts to fill as many of the zero-padded args.nconstit
     entries with collinear splittings of the constituents by splitting each constituent at most once, same shape as input
     """
-    batchb = batch.copy()
+    batchb = batch.clone()
     nc = batch.shape[2]  # number of constituents
     nzs = np.array(
         [np.where(batch[:, 0, :][i] != 0.0)[0].shape[0] for i in range(len(batch))]
