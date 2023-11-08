@@ -187,8 +187,6 @@ def augmentation(args, x, device):
     if args.do_translation:
         y = translate_jets(y, device, width=args.trsw)
         x = translate_jets(x, device, width=args.trsw)
-    x = rescale_pts(x)  # [batch_size, 3, n_constit]
-    y = rescale_pts(y)  # [batch_size, 3, n_constit]
     x = x.transpose(1, 2)  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
     y = y.transpose(1, 2)  # [batch_size, 3, n_constit] -> [batch_size, n_constit, 3]
     return x, y
